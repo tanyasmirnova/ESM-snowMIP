@@ -155,6 +155,18 @@
    !  occurrence of the Northern Spring Equinox
    REAL , PARAMETER :: EQUINOX_FRACTION= 0.0
 
+   ! constant for FPE model
+   real, parameter :: dsnow = 0.001        ! snow step
+   integer, parameter :: nsnow = 1000      ! total number of snow step
+   integer, parameter :: scheme = 2        ! which scheme is used, 1 for upwind, 2 for MUSCL, and 3 for Lax-Wendroof
+   real, parameter :: CFL = 0.5            ! CFL number
+   real, parameter :: eta_e = 20             ! viscosity coefficient, empirical [cm/h]
+   real, parameter :: mu = 19            ! viscosity coefficient, empirical [cm^3/g]
+   real, dimension(nsnow+4) :: old_prob, new_prob   ! PDF
+   logical :: ISFPE = .TRUE.               ! FPE is active or not
+   logical :: ISSWE = .FALSE.              ! PDF is snow depth or SWE based
+
+
  CONTAINS
    SUBROUTINE init_module_model_constants
    END SUBROUTINE init_module_model_constants

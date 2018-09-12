@@ -101,16 +101,17 @@ program simple_driver
   real    :: xice_threshold  ! threshold below which no ice
   integer :: ISURBAN    ! Vegetation category for urban land class.
   real    :: DT         ! Time step (seconds).
-  real    :: ZLVL       ! Height at which atmospheric forcing variables are taken to be valid (m)
+  !real    :: ZLVL       ! Height at which atmospheric forcing variables are taken to be valid (m)
   real    :: zlvl_wind  ! Height at which the wind forcing variable is taken to be valid (m)
   real, pointer, dimension(:) :: SLDPTH ! Thicknesses of each soil level
   integer :: NSOIL      ! Number of soil levels.
   logical :: LOCAL      ! 
-  logical :: myj        ! MYJ is .true. when MYJPBL scheme is used
+  logical :: myj        ! use MYJ scheme to compute exchange coefficients
   character(len=256) :: LLANDUSE  ! Land-use dataset.  Valid values are :
   !                               ! "USGS" (USGS 24/27 category dataset) and
   !                               ! "MODIFIED_IGBP_MODIS_NOAH" (MODIS 20-category dataset)
   character(len=256) :: LSOIL     ! Soil-category dateset.  Only "STAS" (STATSGO dataset) supported.
+  real, dimension (1:ime,1:jme)    :: ZLVL       ! Downward longwave radiation flux at surface (W m-2) [Forcing]
   real, dimension (1:ime,1:jme)    :: LWDN       ! Downward longwave radiation flux at surface (W m-2) [Forcing]
   real, dimension (1:ime,1:jme)    :: SOLDN      ! Downward shortwave radiation flux at surface (W m-2) [Forcing]
   real, dimension (1:ime,1:jme)    :: SOLNET     ! Net downward shortwave radiation flux at the surface (W m-2)
@@ -406,7 +407,7 @@ acsnow =0.0 ! - run total frozen precipitation
        latitude, longitude, &
        forcing_timestep, ruclsm_timestep, ice(i,j), t1(i,j), stc, smc, &
        sh2o, sldpth, cmc(i,j), snowh(i,j), &
-       sneqv(i,j), tbot(i,j),vegtyp(i,j), soiltyp(i,j), slopetyp(i,j), snoalb(i,j), zlvl, zlvl_wind,        &
+       sneqv(i,j), tbot(i,j),vegtyp(i,j), soiltyp(i,j), slopetyp(i,j), snoalb(i,j), zlvl(i,j), zlvl_wind,        &
        albedo_monthly, shdfac_monthly,z0brd_monthly, lai_monthly, use_urban_module, isurban, shdmin(i,j),   &
        shdmax(i,j), usemonalb, rdlai2d, llanduse,iz0tlnd, sfcdif_option)
 
@@ -556,7 +557,7 @@ acsnow =0.0 ! - run total frozen precipitation
   nowdate = startdate
   ktime = 0
 
-  TIMELOOP : do while ( nowdate <= enddate)
+  TIMELOOP : do while ( nowdate <= enddate) 
 
      !
      ! Increment our counter KTIME and our time variable NOWDATE
@@ -564,9 +565,9 @@ acsnow =0.0 ! - run total frozen precipitation
 
      call geth_newdate(nowdate, startdate, ktime*(ruclsm_timestep/60))
      ktime = ktime + 1
-
-   print *,'nowdate=',nowdate,'enddate=',enddate
-   print *,'loop_for_a_while=',loop_for_a_while
+  
+     print *,'nowdate=',nowdate,'enddate=',enddate
+     print *,'loop_for_a_while=',loop_for_a_while
 
      !
      ! Check if we need to cycle back to our starting data
@@ -575,22 +576,20 @@ acsnow =0.0 ! - run total frozen precipitation
      if ((loop_for_a_while) .and. (nowdate == enddate)) then
         print*, 'Nowdate: '//nowdate//"  Switching to startdate: "//startdate
         call output_close()
-
-
-   print *,'nowdate=',nowdate
+   
+        print *,'nowdate=',nowdate
         write(teststr, '(I4.4)') reloop_count
-   print *,'reloop_count=',reloop_count,'teststr=',teststr
+        print *,'reloop_count=',reloop_count,'teststr=',teststr
         cmd =  "mv OUTPUT.nc OUTPUT."//trim(teststr)//".nc"
         reloop_count = reloop_count + 1
         call system(trim(cmd))
-
+   
         ktime = 1
         call read_forcing_text(iunit, nowdate, forcing_timestep,      &
-             sfcspd(i,j), sfcu, sfcv, tabs(i,j), q2(i,j),             &
-             sfcprs(i,j), soldn(i,j), longwave(i,j), prcp(i,j), snfall(i,j),kt,ierr)
-
+          sfcspd(i,j), sfcu, sfcv, tabs(i,j), q2(i,j),             &
+          sfcprs(i,j), soldn(i,j), longwave(i,j), prcp(i,j), snfall(i,j),kt,ierr)
+   
         if (ierr == 0) stop "Wrong input for looping a year."
-
         nowdate = startdate
         rewind(iunit)
 
@@ -602,7 +601,7 @@ acsnow =0.0 ! - run total frozen precipitation
      ! SFCSPD, SFCU, SFCV, TABS, Q2, SFCPRS, SOLDN, LONGWAVE, PRCP.
      !
 
-       print *,'nowdate=',nowdate, ' at reloop_count=',reloop_count
+     print *,'nowdate=',nowdate, ' at reloop_count=',reloop_count
      call read_forcing_text(iunit, nowdate, forcing_timestep,      &
           sfcspd(i,j), sfcu, sfcv, TABS(i,j), q2(i,j), sfcprs(i,j),&
           soldn(i,j), longwave(i,j), prcp(i,j), snfall(i,j),kt,ierr)
@@ -617,10 +616,9 @@ acsnow =0.0 ! - run total frozen precipitation
      ! frozen.
      !
 !tgs - any possibility to get mixed precipitation from the forcing?
-        FFROZP(i,j) = 0.0
+     FFROZP(i,j) = 0.0
      if ( (PRCP(i,j)+snfall(i,j)) > 0.) then
         FFROZP(i,j)=snfall(i,j)/(snfall(i,j)+prcp(i,j))
-        FFROZP(i,j)=max(0.,min(1.,FFROZP(i,j)))
      endif
 
 !     if ( (PRCP(i,j) > 0) .and. (TABS(i,j) < 273.15) ) then
@@ -637,7 +635,7 @@ acsnow =0.0 ! - run total frozen precipitation
      !             RHO is used in LSMRUC.
      !
 
-     CALL CALTMP(t1(i,j), TABS(i,j), SFCPRS(i,j), ZLVL, Q2(i,j), TH2(i,j), t1V(i,j), TH2V(i,j), RHO(i,j)) ! Returns TH2, t1V, TH2V, RHO
+     CALL CALTMP(t1(i,j), TABS(i,j), SFCPRS(i,j), ZLVL(i,j), Q2(i,j), TH2(i,j), t1V(i,j), TH2V(i,j), RHO(i,j)) ! Returns TH2, t1V, TH2V, RHO
      CALL CALHUM(TABS(i,j), SFCPRS(i,j), Q2SAT(i,j), DQSDT2(i,j)) ! Returns Q2SAT, DQSDT2
 
      !
@@ -650,8 +648,8 @@ acsnow =0.0 ! - run total frozen precipitation
         albbck(i,j) = 0.18
      endif
 
-        Z0(i,j) = month_d(z0brd_monthly, nowdate)
-   if(sncovr(i,j) > 0.99) Z0(i,j) = 0.011
+     Z0(i,j) = month_d(z0brd_monthly, nowdate)
+     if(sncovr(i,j) > 0.99) Z0(i,j) = 0.011
 
      if ( sfcdif_option == 1 ) then
         z0brd  = z0
@@ -711,7 +709,7 @@ acsnow =0.0 ! - run total frozen precipitation
 
      else if ( SFCDIF_OPTION == 1 ) then
 
-        CALL SFCDIF_MYJ ( ZLVL, ZLVL_WIND , Z0(i,j) , Z0BRD(i,j) , SFCPRS(i,j) , t1(i,j) , TABS(i,j) , qsfc(i,j) , &
+        CALL SFCDIF_MYJ ( ZLVL(i,j), ZLVL_WIND , Z0(i,j) , Z0BRD(i,j) , SFCPRS(i,j) , t1(i,j) , TABS(i,j) , qsfc(i,j) , &
              Q2(i,j) , SFCSPD(i,j) , CZIL , RIBB , CM(i,j) , CH(i,j) , VEGTYP(i,j) , ISURBAN , IZ0TLND )
 
      endif
@@ -974,20 +972,26 @@ acsnow =0.0 ! - run total frozen precipitation
 ! keepfr3dflag - flag for frozen soil physics: 0. or 1.
 ! add initialization here 
 ! temporary set fractional_seaice=0
-       fractional_seaice = 0
-  if ( fractional_seaice == 0 ) then
-     xice_threshold = 0.5
-  else if ( fractional_seaice == 1 ) then
+!       fractional_seaice = 0
+! if ( fractional_seaice == 0 ) then
+!    xice_threshold = 0.5
+! else if ( fractional_seaice == 1 ) then
+!    xice_threshold = 0.02
+! endif
+  
+  fractional_seaice = .FALSE.
+  if ( fractional_seaice) then
      xice_threshold = 0.02
+  else 
+     xice_threshold = 0.5
   endif
 
     xice(i,j) = ice(i,j)
 
      myj = .false.
-!tgs - Sept 2018 - do not use myj=.true. for off-line simulations
-!  if ( sfcdif_option == 1 ) then
-!     myj = .true.
-!  endif
+  if ( sfcdif_option == 1) then
+     myj = .true.
+  endif
 
     xland(i,j) = 1.
     nlcat=lucats
@@ -1002,9 +1006,9 @@ acsnow =0.0 ! - run total frozen precipitation
     snow(i,j) = sneqv(i,j)*1.e3
     graupelncv(i,j) = 0.
     snowncv(i,j) = snfall(i,j)*dt
-    rainncv(i,j) = (prcp(i,j)+snfall(i,j))*dt
+    rainncv(i,j) = prcp(i,j)*dt
 
-    rainbl(i,j)=rainncv(i,j)
+    rainbl(i,j)=snowncv(i,j)+rainncv(i,j)
 
 !   if(tabs(i,j) > 273.15) then
 !    snowncv(i,j) = 0.
@@ -1357,12 +1361,17 @@ endif
           nowdate(1:4), nowdate(5:6), nowdate(7:8), nowdate(9:10), nowdate(11:12),  &
           stc(1:nsoil),smc(1:nsoil),sh2o(1:nsoil)
      endif
+!   print*, nowdate
+!   print*, 'XXXXXXXXXXX', teststr
+!  if (trim(teststr) > '0010') print*, trim(teststr)
 !      loop_for_a_while = .true.
-    if (trim(teststr) > '0010') then
-        exit TIMELOOP
-        print *,'Spin-up and Main runs are finished'
-        stop
-    endif 
+!    if (trim(teststr) > '0010') then
+!        print *,'Spin-up and Main runs are finished'
+!        exit TIMELOOP
+!        print *,'Spin-up and Main runs are finished'
+!        stop
+!    endif
+
   enddo TIMELOOP
 
 
