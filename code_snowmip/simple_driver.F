@@ -58,7 +58,9 @@ program simple_driver
   character(len=256) :: forcing_filename  ! The name of the initial/forcing conditions file, as found
   !                                       ! by Fortran library function GETARG
 
-  !
+  character(len=256) :: FPEpara_filename  ! The name of the FPE parameters file, as found
+  !                                       ! by Fortran library function GETARG
+  
   ! Loop increment variables:
   !
 
@@ -294,6 +296,7 @@ program simple_driver
 
   call getarg(0, executable_name)
   call getarg(1, forcing_filename)
+  call getarg(2, FPEpara_filename)
 
   if (forcing_filename == " ") then
      write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
@@ -302,6 +305,12 @@ program simple_driver
      stop ":  ERROR EXIT"
   endif
 
+  if (FPEpara_filename == " ") then
+     write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
+     write(*,'(" ***** Please specify the FPE parameters filename on the command-line.")')
+     write(*,'(" ***** E.g.:  ''",A,1x,A,"''",/)') trim(executable_name), "sodanskyla.dat FPE.para"
+     stop ":  ERROR EXIT"
+  endif
   !
   ! Some defaults
   !
@@ -410,6 +419,8 @@ acsnow =0.0 ! - run total frozen precipitation
        sneqv(i,j), tbot(i,j),vegtyp(i,j), soiltyp(i,j), slopetyp(i,j), snoalb(i,j), zlvl(i,j), zlvl_wind,        &
        albedo_monthly, shdfac_monthly,z0brd_monthly, lai_monthly, use_urban_module, isurban, shdmin(i,j),   &
        shdmax(i,j), usemonalb, rdlai2d, llanduse,iz0tlnd, sfcdif_option)
+
+  CALL open_FPEpara_file(FPEpara_filename)
 
   allocate( soilmois (1:ime, 1:nsoil ,1:jme) )
   allocate( sliqw (1:ime, 1:nsoil ,1:jme) )

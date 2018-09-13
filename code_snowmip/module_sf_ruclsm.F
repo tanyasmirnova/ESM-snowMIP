@@ -8019,7 +8019,7 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     real, parameter :: pi = 3.1415926
 
     dep_mean_ini = 0.05 
-    dep_std_ini = 0.01
+    dep_std_ini = 0.015
 
     ! IC
     DO i = 1, nsnow+4

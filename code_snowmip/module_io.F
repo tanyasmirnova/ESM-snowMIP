@@ -131,10 +131,16 @@ contains
     ! Generic wraper for the more specific ASCII and NetCDF routines that close the output
     ! units when the run is completed.
     !
+    !USE module_model_constants
     implicit none
     write(*,'("Closing output files.")')
     if (OUTPUT_ASCII)  call output_ascii_close
     if (OUTPUT_NETCDF) call output_netcdf_close
+
+    !DEALLOCATE(old_prob, new_prob)
+    CLOSE(22)   ! close FPE output file 
+    CLOSE(23)   ! close FPE output file 
+    
   end subroutine output_close
 
 !------------------------------------------------------------------------------------------------
