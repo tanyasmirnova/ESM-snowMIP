@@ -108,12 +108,12 @@ program simple_driver
   real, pointer, dimension(:) :: SLDPTH ! Thicknesses of each soil level
   integer :: NSOIL      ! Number of soil levels.
   logical :: LOCAL      ! 
-  logical :: myj        ! use MYJ scheme to compute exchange coefficients
+  logical :: myj        ! MYJ is .true. when MYJPBL scheme is used
   character(len=256) :: LLANDUSE  ! Land-use dataset.  Valid values are :
   !                               ! "USGS" (USGS 24/27 category dataset) and
   !                               ! "MODIFIED_IGBP_MODIS_NOAH" (MODIS 20-category dataset)
   character(len=256) :: LSOIL     ! Soil-category dateset.  Only "STAS" (STATSGO dataset) supported.
-  real, dimension (1:ime,1:jme)    :: ZLVL       ! Downward longwave radiation flux at surface (W m-2) [Forcing]
+  real, dimension (1:ime,1:jme)    :: ZLVL       ! Height at which atmospheric forcing variables are taken to be valid (m)
   real, dimension (1:ime,1:jme)    :: LWDN       ! Downward longwave radiation flux at surface (W m-2) [Forcing]
   real, dimension (1:ime,1:jme)    :: SOLDN      ! Downward shortwave radiation flux at surface (W m-2) [Forcing]
   real, dimension (1:ime,1:jme)    :: SOLNET     ! Net downward shortwave radiation flux at the surface (W m-2)
@@ -630,6 +630,7 @@ acsnow =0.0 ! - run total frozen precipitation
      FFROZP(i,j) = 0.0
      if ( (PRCP(i,j)+snfall(i,j)) > 0.) then
         FFROZP(i,j)=snfall(i,j)/(snfall(i,j)+prcp(i,j))
+        FFROZP(i,j)=max(0.,min(1.,FFROZP(i,j)))
      endif
 
 !     if ( (PRCP(i,j) > 0) .and. (TABS(i,j) < 273.15) ) then
@@ -1000,9 +1001,10 @@ acsnow =0.0 ! - run total frozen precipitation
     xice(i,j) = ice(i,j)
 
      myj = .false.
-  if ( sfcdif_option == 1) then
-     myj = .true.
-  endif
+!tgs - Sept 2018 - do not use myj=.true. for off-line simulations
+!  if ( sfcdif_option == 1 ) then
+!     myj = .true.
+!  endif
 
     xland(i,j) = 1.
     nlcat=lucats
@@ -1017,9 +1019,9 @@ acsnow =0.0 ! - run total frozen precipitation
     snow(i,j) = sneqv(i,j)*1.e3
     graupelncv(i,j) = 0.
     snowncv(i,j) = snfall(i,j)*dt
-    rainncv(i,j) = prcp(i,j)*dt
+    rainncv(i,j) = (prcp(i,j)+snfall(i,j))*dt
 
-    rainbl(i,j)=snowncv(i,j)+rainncv(i,j)
+    rainbl(i,j)=rainncv(i,j)
 
 !   if(tabs(i,j) > 273.15) then
 !    snowncv(i,j) = 0.
@@ -1372,17 +1374,12 @@ endif
           nowdate(1:4), nowdate(5:6), nowdate(7:8), nowdate(9:10), nowdate(11:12),  &
           stc(1:nsoil),smc(1:nsoil),sh2o(1:nsoil)
      endif
-!   print*, nowdate
-!   print*, 'XXXXXXXXXXX', teststr
-!  if (trim(teststr) > '0010') print*, trim(teststr)
 !      loop_for_a_while = .true.
-!    if (trim(teststr) > '0010') then
-!        print *,'Spin-up and Main runs are finished'
-!        exit TIMELOOP
-!        print *,'Spin-up and Main runs are finished'
-!        stop
-!    endif
-
+    if (trim(teststr) > '0010') then
+        exit TIMELOOP
+        print *,'Spin-up and Main runs are finished'
+        stop
+    endif 
   enddo TIMELOOP
 
 

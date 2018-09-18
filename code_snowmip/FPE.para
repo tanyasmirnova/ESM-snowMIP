@@ -1,0 +1,10 @@
+&FPE_parameters
+ISFPE    = .FALSE.            ! FPE is active or not
+ISSWE    = .FALSE.            ! PDF is snow depth or SWE based
+dsnow    = 0.01               ! snow step
+nsnow    = 200                ! total number of snow step
+scheme   = 1                  ! which scheme is used, 1 for upwind, 2 for MUSCL, and 3 for Lax-Wendroof
+CFL      = 0.5                ! CFL number
+eta_e    = 20                 ! viscosity coefficient, empirical [cm/h]
+mu       = 19                 ! viscosity coefficient, empirical [cm^3/g]
+/
