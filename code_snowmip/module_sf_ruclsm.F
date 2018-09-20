@@ -1867,7 +1867,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
    ! SNHEI_CRIT is a threshold for fractional snow
    SNHEI_CRIT=0.01601*1.e3/rhosn
    SNHEI_CRIT_newsn=0.0005*1.e3/rhosn
-<<<<<<< HEAD
+
    ! snowfrac from the previous time step
    IF ( .NOT. ISFPE ) THEN
      SNOWFRAC=MIN(1.,SNHEI/(2.*SNHEI_CRIT))
@@ -1877,10 +1877,9 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
    ELSE
      if(snowfrac < 0.75) snow_mosaic = 1.
    END IF
-=======
+
 ! snowfrac from the previous time step
    IF (.NOT. ISFPE) SNOWFRAC=MIN(1.,SNHEI/(2.*SNHEI_CRIT))
->>>>>>> 946c6b985f40a931b0cd51a024d00151f10e6947
 
    IF(NEWSN.GT.0.) THEN
      !Update snow on the ground
