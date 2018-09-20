@@ -710,8 +710,8 @@ CONTAINS
          print*,'frzfrac(i,j)=',frzfrac(i,j)
          print*,'FRPCPN=',FRPCPN
        IF(FRPCPN) THEN
-#if (EM_CORE==1)
-    print *,'EM_CORE'
+!#if (EM_CORE==1)
+!    print *,'EM_CORE'
          prcpncliq = rainncv(i,j)*(1.-frzfrac(i,j))
          prcpncfr = rainncv(i,j)*frzfrac(i,j)
 !- apply the same frozen precipitation fraction to convective precip
@@ -736,16 +736,16 @@ CONTAINS
                /(prcpncfr + prcpcufr)))
          curat=min(1.,max(0.,(prcpcufr/(prcpncfr + prcpcufr))))
          endif
-#else
-    print *,'non EM_CORE'
-         PRCPMS    = (RAINBL(i,j)/DT*1.e-3)*(1-FRZFRAC(I,J))
-         NEWSNMS  = (RAINBL(i,j)/DT*1.e-3)*FRZFRAC(I,J)
-       if(newsnms == 0.) then
-         snowrat = 0.
-       else
-         snowrat = min(1.,newsnms/(newsnms+prcpms))
-       endif
-#endif
+!#else
+!    print *,'non EM_CORE'
+!         PRCPMS    = (RAINBL(i,j)/DT*1.e-3)*(1-FRZFRAC(I,J))
+!         NEWSNMS  = (RAINBL(i,j)/DT*1.e-3)*FRZFRAC(I,J)
+!       if(newsnms == 0.) then
+!         snowrat = 0.
+!       else
+!         snowrat = min(1.,newsnms/(newsnms+prcpms))
+!       endif
+!#endif
 
        ELSE  ! .not. FRPCPN
           if (tabs.le.273.15) then
@@ -773,15 +773,15 @@ CONTAINS
 !    module_diagnostics
           precipfr(i,j) = NEWSNMS * DT *1.e3
 
-        if   (myj)   then
+!        if   (myj)   then
          QKMS=CHS(i,j)
          TKMS=CHS(i,j)
-        else
-!--- convert exchange coeff QKMS to [m/s]
-         QKMS=FLQC(I,J)/RHO/MAVAIL(I,J)
-!         TKMS=FLHC(I,J)/RHO/CP
-         TKMS=FLHC(I,J)/RHO/(CP*(1.+0.84*QVATM))  ! mynnsfc uses CPM
-        endif
+!        else
+!!--- convert exchange coeff QKMS to [m/s]
+!         QKMS=FLQC(I,J)/RHO/MAVAIL(I,J)
+!!         TKMS=FLHC(I,J)/RHO/CP
+!         TKMS=FLHC(I,J)/RHO/(CP*(1.+0.84*QVATM))  ! mynnsfc uses CPM
+!        endif
 !--- convert incoming snow and canwat from mm to m
          SNWE=SNOW(I,J)*1.E-3
          SNHEI=SNOWH(I,J)
@@ -858,7 +858,7 @@ CONTAINS
        if(SNOW(i,j).gt.0. .and. SNOWH(i,j).gt.0.) then
          RHOSN = SNOW(i,j)/SNOWH(i,j)   ! How does snow height be calculated? Siwei
        else
-        RHOSN = 300.
+         RHOSN = 300. ! when no snow on the ground
        endif
 
        emissl(i,j) = emiss(i,j)
@@ -1257,7 +1257,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 
 !--- SNOWC snow cover flag
        if(snowfrac > 0. .and. xice(i,j).ge.xice_threshold ) then
-         IF(.NOT. ISFPE) SNOWFRAC = SNOWFRAC*XICE(I,J)
+         IF(.NOT. ISFPE) SNOWFRAC = SNOWFRAC*XICE(I,J) ! sea-ice points
        endif
 
        SNOWC(I,J)=SNOWFRAC
@@ -1742,7 +1742,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
      !-- The minimum albedo at t=0C for ice is 0.1 less.
      ALBice = MIN(ALB_SNOW_FREE,MAX(ALB_SNOW_FREE - 0.05,   &
                ALB_SNOW_FREE - 0.1*(tice(1)+10.)/10. ))
-   endif
+   endif ! sea ice
 
    IF ( debug_print ) THEN
      print *,'I,J,KTAU,QKMS,TKMS', i,j,ktau,qkms,tkms
@@ -1867,6 +1867,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
    ! SNHEI_CRIT is a threshold for fractional snow
    SNHEI_CRIT=0.01601*1.e3/rhosn
    SNHEI_CRIT_newsn=0.0005*1.e3/rhosn
+<<<<<<< HEAD
    ! snowfrac from the previous time step
    IF ( .NOT. ISFPE ) THEN
      SNOWFRAC=MIN(1.,SNHEI/(2.*SNHEI_CRIT))
@@ -1876,6 +1877,10 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
    ELSE
      if(snowfrac < 0.75) snow_mosaic = 1.
    END IF
+=======
+! snowfrac from the previous time step
+   IF (.NOT. ISFPE) SNOWFRAC=MIN(1.,SNHEI/(2.*SNHEI_CRIT))
+>>>>>>> 946c6b985f40a931b0cd51a024d00151f10e6947
 
    IF(NEWSN.GT.0.) THEN
      !Update snow on the ground
@@ -1887,14 +1892,18 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
        dripsn = drip - dripliq
        snwe=snwe+dripsn
        infwater=infwater+dripliq
-       dripliq=0.
+       dripliq= 0.
        dripsn = 0.
        !       else
        !         snwe=snwe+drip
        !       endif
      endif
-     IF (.NOT. ISFPE) snhei=snwe*rhowater/rhosn
-     NEWSN=NEWSN*rhowater/rhonewsn
+     IF (.NOT. ISFPE) then
+       snhei=snwe*rhowater/rhosn
+       SNOWFRAC=MIN(1.,SNHEI/(2.*SNHEI_CRIT)) 
+     ENDIF ! ISFPE
+
+     NEWSN=NEWSN*rhowater/rhonewsn ! new snowfall depth
      !---------------------------------------------------------------
       ! call FPE approach
       IF ( ISFPE ) THEN
@@ -1918,10 +1927,11 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
         SNOWFRAC = dep_scf          ! snow coverage fraction
         dep_std = dep_std           ! std of snow depth
       END IF
-     !---------------------------------------------------------------
-   ENDIF
 
-   
+     !---------------------------------------------------------------
+
+   ENDIF ! newsn > 0.
+
    IF(SNHEI.GT.0.0) THEN
      !-- SNOW on the ground
      !--- Land-use category should be changed to snow/ice for grid points with snow>0
@@ -1936,7 +1946,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
      !         SNHEI_CRIT=0.02*1.e3/rhosn
      !         SNHEI_CRIT_newsn=0.001*1.e3/rhosn
      !    endif
-     IF ( .NOT. ISFPE ) SNOWFRAC=MIN(1.,SNHEI/(2.*SNHEI_CRIT))
+     ! IF ( .NOT. ISFPE ) SNOWFRAC=MIN(1.,SNHEI/(2.*SNHEI_CRIT))
 
      !24nov15 - SNOWFRAC for urban category < 0.75 
      if(ivgtyp == urban) snowfrac=min(0.75,snowfrac)
@@ -1954,6 +1964,8 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
      !       elseif(snowfrac < 0.3 .and. tabs > 275.) then
      !       if(snowfrac < 0.75) snow_mosaic = 1.
      
+     if(snowfrac < 0.75) snow_mosaic = 1.
+   
      if(newsn > 0. ) then
        IF ( ISFPE ) THEN
          SNOWFRACnewsn = SNOWFRAC
@@ -1967,12 +1979,6 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
        ! new snow
        KEEP_SNOW_ALBEDO = 1.
        snow_mosaic=0.  ! ???
-     ENDIF
-     
-     !7Mar18 -  turn off snow mosaic for T<271K to prevent from too warm
-     !  temperature and loss of low-level clouds in HRRR (case 2 Feb. 2018, 15z)
-     IF (TABS < 271.) then
-       snow_mosaic=0. 
      ENDIF
      
      IF ( debug_print ) THEN
@@ -3141,7 +3147,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
        print *,'Q1*(1.-vegfrac),EDIR1',Q1*(1.-vegfrac),EDIR1
        print *,'CST,WETCAN,DRYCAN',CST,WETCAN,DRYCAN
        print *,'EC1=',EC1,'ETT1=',ETT1,'CMC2MS=',CMC2MS,'CMC2MS*ras=',CMC2MS*ras
-!       print *,'MYJ EETA',eeta,eeta*xlv
+!       print *,'evp MYJ EETA',eeta,eeta*xlv
     ENDIF
 !-- actual moisture flux from RUC LSM
           EETA = (EDIR1 + EC1 + ETT1)*1.E3
@@ -4170,7 +4176,7 @@ print *, 'TSO before calling SNOWTEMP: ', tso
 !        sublim=eeta
         sublim=EDIR1*1.E3
 ! Energy budget
-        FLTOT=RNET-HFT-XLVm*EETA-S-SNOH-x
+!        FLTOT=RNET-HFT-XLVm*EETA-S-SNOH-x
         FLTOT=RNET-HFT-QFX-S-SNOH-x
 ! Back to heat flux into soil
        S=THDIF(1)*CAP(1)*DZSTOP*(TSO(1)-TSO(2))
@@ -4496,8 +4502,7 @@ print *, 'TSO before calling SNOWTEMP: ', tso
 !*** Average temperature of snow pack (C)
 !         tsnav=0.5/snhei*((soilt+soilt1)*deltsn                       &
 !                     +(soilt1+tso(1))*(SNHEI-DELTSN))                 &
-         tsnav= soilt1 - &
-                     (-273.15)
+         tsnav= soilt1 - 273.15
         endif
        ENDIF
 
@@ -5219,6 +5224,7 @@ print *, 'D9SN,SOILT,TSOB : ', D9SN,SOILT,TSOB
         print *,'200 QVATM,QVG,QSG,QCG,TSO(1)',QVATM,QVG,QSG,QCG,TSO(1)
     ENDIF
 
+if(1==2) then
   if(qvatm > QSG .and. iter==0) then
 !condensation regime
     IF ( debug_print ) THEN
@@ -5230,6 +5236,7 @@ print *, 'D9SN,SOILT,TSOB : ', D9SN,SOILT,TSOB
       iter=1
       goto 2111
   endif
+endif ! 1==2
     IF ( debug_print ) THEN
      if(iter == 1) then
       print *,'QVATM,QVG,QSG,QCG,TS1',QVATM,QVG,QSG,QCG,TS1
@@ -5733,6 +5740,7 @@ print *, 'D9SN,SOILT,TSOB : ', D9SN,SOILT,TSOB
       ENDIF
   200   CONTINUE
 
+if(1==2) then
       if(qvatm > QSG .and. iter==0) then
         !condensation regime
         IF ( debug_print ) THEN
@@ -5744,6 +5752,8 @@ print *, 'D9SN,SOILT,TSOB : ', D9SN,SOILT,TSOB
         iter=1
         goto 2211
       endif
+endif ! 1==2
+
       IF ( debug_print ) THEN
         if(iter==1) then
           print *,'SNOW - QVATM,QVG,QSG,QCG,TS1',QVATM,QVG,QSG,QCG,TS1
@@ -7202,8 +7212,8 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
 !   INTEGER, DIMENSION( 1:50 )   ::   if1
    INTEGER   ::   kstart, kfin, lstart, lfin
    INTEGER   ::   k
-   REAL      ::   area,  deltalai, factor, znt1, lb
-   REAL,     DIMENSION( 1:NLCAT ) :: ZNTtoday, LAItoday
+   REAL      ::   area,  factor, znt1, lb
+   REAL,     DIMENSION( 1:NLCAT ) :: ZNTtoday, LAItoday, deltalai
 
 !***********************************************************************
 !        DATA ZS1/0.0,0.05,0.20,0.40,1.6,3.0/   ! o -  levels in soil
@@ -7236,14 +7246,16 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
       endif
 
       do k = 1,nlcat
-       if(IFORTBL(k) == 1) deltalai=0.2
-       if(IFORTBL(k) == 2 .or. IFORTBL(k) == 7) deltalai=0.5
-       if(IFORTBL(k) == 3) deltalai=0.45
-       if(IFORTBL(k) == 4) deltalai=0.75
-       if(IFORTBL(k) == 5) deltalai=0.86
+       if(IFORTBL(k) == 1) deltalai(k)=min(0.2,0.8*LAITBL(K))
+       if(IFORTBL(k) == 2 .or. IFORTBL(k) == 7) deltalai(k)=min(0.5,0.8*LAITBL(K))
+       if(IFORTBL(k) == 3) deltalai(k)=min(0.45,0.8*LAITBL(K))
+       if(IFORTBL(k) == 4) deltalai(k)=min(0.75,0.8*LAITBL(K))
+       if(IFORTBL(k) == 5) deltalai(k)=min(0.86,0.8*LAITBL(K))
 
        if(k.ne.iswater) then
-        LAItoday(k) = LAITBL(K) * (1. - deltalai * factor)
+!-- 20aug18 - change in LAItoday based on the greenness fraction for the current
+!day
+        LAItoday(k) = LAITBL(K) - deltalai(k) * factor
          if(IFORTBL(k) == 7) then
 !crops
            ZNTtoday(k) = Z0TBL(K) * (1. - 0.66 * factor)
@@ -7259,7 +7271,7 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     IF ( debug_print ) THEN
 !      if(i.eq.358.and.j.eq.260)then
         print *,'ivgtyp,factor,vegfrac,shdmin,shdmax,deltalai,laitoday(ivgtyp),znttoday(ivgtyp)', &
-         i,j,ivgtyp,factor,vegfrac,shdmin,shdmax,deltalai,laitoday(ivgtyp),znttoday(ivgtyp)
+         i,j,ivgtyp,factor,vegfrac,shdmin,shdmax,deltalai(ivgtyp),laitoday(ivgtyp),znttoday(ivgtyp)
 !      endif
     ENDIF
 
