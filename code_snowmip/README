@@ -35,13 +35,16 @@ To run:
 
     execute:
       "driver.exe *.dat"
+To run with the FPE model execute:
+      "driver.exe *.dat FPE.para"
 
 Input file:
 
     The forcing data and initial data are combined in a single file
-    "*.dat".  A namelist section in 
+    "*.dat" for each of SnowMIP sites.  A namelist section in 
     that file describes site parameters and initial conditions. The
     namelist is followed by records of forcing fields.
+    FPE.para specifies parameters for the FPE model.
 
 Output file:
 

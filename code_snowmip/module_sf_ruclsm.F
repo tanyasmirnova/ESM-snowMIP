@@ -170,7 +170,7 @@ CONTAINS
                                                         wind_sp
 
 !#if (EM_CORE==1)
-   REAL,       DIMENSION( ims:ime , jms:jme ),                   &
+   REAL,       OPTIONAL, DIMENSION( ims:ime , jms:jme ),         &
                INTENT(IN   )    ::                   GRAUPELNCV, &
                                                         SNOWNCV, &
                                                         RAINNCV
@@ -723,11 +723,11 @@ CONTAINS
          PRCPMS   = (prcpncliq + prcpculiq)/DT*1.e-3
          NEWSNMS  = (prcpncfr + prcpcufr)/DT*1.e-3
 
-!         IF ( PRESENT( graupelncv ) ) THEN
+         IF ( PRESENT( graupelncv ) ) THEN
              graupamt = graupelncv(i,j)
-!         ELSE
-!             graupamt = 0.
-!         ENDIF
+         ELSE
+             graupamt = 0.
+         ENDIF
          if((prcpncfr + prcpcufr) > 0.) then
 ! -- calculate snow, graupel and ice fractions in falling frozen precip
          snowrat=min(1.,max(0.,snowncv(i,j)/(prcpncfr + prcpcufr)))
@@ -871,7 +871,7 @@ CONTAINS
 !--- initializing soil and surface properties
      CALL SOILVEGIN  ( debug_print,                                                  &
                        mosaic_lu, mosaic_soil,soilfrac,nscat,shdmin(i,j),shdmax(i,j),&
-                       NLCAT,ILAND,ISOIL,iswater,MYJ,IFOREST,lufrac,VEGFRA(I,J),     &
+                       NLCAT,ILAND,ISOIL,iswater,IFOREST,lufrac,VEGFRA(I,J),         &
                        EMISSL(I,J),PC(I,J),ZNT(I,J),LAI(I,J),RDLAI2D,                &
                        QWRTZ,RHOCS,BCLH,DQM,KSAT,PSIS,QMIN,REF,WILT,i,j,local)
     IF ( debug_print ) THEN
@@ -1029,6 +1029,7 @@ CONTAINS
 !              soilm1d (k) = min(max(0.,soilmois(i,k,j)),dqm)
               tso1d   (k) = tso(i,k,j)
               soiliqw (k) = min(max(0.,sh2o(i,k,j)-qmin),soilm1d(k))
+              soilice (k) =(soilm1d (k) - soiliqw (k))/0.9 
            ENDDO 
 
            do k=1,nzs
@@ -2950,6 +2951,8 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
           enddo
 
 ! Sakaguchi and Zeng (2009) - dry soil resistance to evaporation
+! 20jun18 - alfa is the ratio of surface Q to the saturation RH
+!           qvg = alfa * qsg
 !      if (vgtype==11) then   ! MODIS wetland
         alfa=1.
 !      else
@@ -2961,6 +2964,16 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 !      endif
         alfa=1.
 ! field capacity
+! 20jun18 - beta in Eq. (4) is called soilres here - it limits soil evaporation
+! when soil moisture is below field capacity.  [Lee and Pielke, 1992]
+! This formulation agrees with obsevations when top layer is < 2 cm thick.
+! Soilres = 1 for snow, glaciers and wetland.
+!        fc=ref  - suggested in the paper
+!        fc=max(qmin,ref*0.5) ! used prior to 20jun18 change
+! Switch from ref*0.5 to ref*0.25 will reduce soil resistance, increase direct
+! evaporation, effects sparsely vegetated areas--> cooler during the day
+!        fc=max(qmin,ref*0.25)  ! 
+! For now we'll go back to ref*0.5
         fc=max(qmin,ref*0.5)
         fex_fc=1.
       if((soilmois(1)+qmin) > fc .or. (qvatm-qvg) > 0.) then
@@ -6939,7 +6952,7 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
      SUBROUTINE SOILVEGIN  ( debug_print,                            &
                              mosaic_lu,mosaic_soil,soilfrac,nscat,   &
                      shdmin, shdmax,                                 &
-                     NLCAT,IVGTYP,ISLTYP,iswater,MYJ,                &
+                     NLCAT,IVGTYP,ISLTYP,iswater,                    &
                      IFOREST,lufrac,vegfrac,EMISS,PC,ZNT,LAI,RDLAI2D,&
                      QWRTZ,RHOCS,BCLH,DQM,KSAT,PSIS,QMIN,REF,WILT,I,J&
                     ,local)
@@ -7176,7 +7189,6 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
                                                          ISLTYP
    INTEGER,    INTENT(IN   )    ::     mosaic_lu, mosaic_soil
 
-   LOGICAL,    INTENT(IN   )    ::     myj
    REAL,       INTENT(IN )      ::   SHDMAX
    REAL,       INTENT(IN )      ::   SHDMIN
    REAL,       INTENT(IN )      ::   VEGFRAC
@@ -7257,7 +7269,7 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
         LAItoday(k) = LAITBL(K) - deltalai(k) * factor
          if(IFORTBL(k) == 7) then
 !crops
-           ZNTtoday(k) = Z0TBL(K) * (1. - 0.66 * factor)
+           ZNTtoday(k) = Z0TBL(K) - 0.125 * factor
          else
            ZNTtoday(k) = Z0TBL(K)
          endif
