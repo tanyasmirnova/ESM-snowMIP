@@ -1037,10 +1037,10 @@ acsnow =0.0 ! - run total frozen precipitation
     hfrain(i,j) = 0.
     esnow(i,j) = 0.
     snomlt(i,j) = 0.
-    CALL LSMRUC(local,dt,ktime,nsoil,                            &
+    CALL LSMRUC(nowdate,local,dt,ktime,nsoil,                            &
                 sldpth,rainbl,snow,snowh,sncovr,ffrozp,frpcpn,   &
-                rhosnf,graupelncv,snowncv,rainncv,precipfr,      &
-                zlvl*2.,sfcprs,tabs,q2,qcatm,rho,                & !p_phy in [pa]
+                rhosnf,graupelncv,snowncv,rainncv,precipfr,sfcspd,  &
+                zlvl_wind, zlvl*2.,sfcprs,tabs,q2,qcatm,rho,     & !p_phy in [pa]
                 longwave,solnet,emissi,ch,                       & !flqc,flhc,
                 mavail,cmc,shdfac*100.,albedo,z0,                &
                 z0brd,snoalb, albbck, xlai,                      &   !new
