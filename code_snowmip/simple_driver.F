@@ -1375,11 +1375,11 @@ endif
           stc(1:nsoil),smc(1:nsoil),sh2o(1:nsoil)
      endif
 !      loop_for_a_while = .true.
-    if (trim(teststr) > '0010') then
-        exit TIMELOOP
-        print *,'Spin-up and Main runs are finished'
-        stop
-    endif 
+!    if (trim(teststr) > '0010') then
+!        exit TIMELOOP
+!        print *,'Spin-up and Main runs are finished'
+!        stop
+!    endif 
   enddo TIMELOOP
 
 

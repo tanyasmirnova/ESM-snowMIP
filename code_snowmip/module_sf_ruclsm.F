@@ -170,7 +170,7 @@ CONTAINS
                                                         wind_sp
 
 !#if (EM_CORE==1)
-   REAL,       OPTIONAL, DIMENSION( ims:ime , jms:jme ),         &
+   REAL,       DIMENSION( ims:ime , jms:jme ),         &
                INTENT(IN   )    ::                   GRAUPELNCV, &
                                                         SNOWNCV, &
                                                         RAINNCV
@@ -723,11 +723,11 @@ CONTAINS
          PRCPMS   = (prcpncliq + prcpculiq)/DT*1.e-3
          NEWSNMS  = (prcpncfr + prcpcufr)/DT*1.e-3
 
-         IF ( PRESENT( graupelncv ) ) THEN
+!         IF ( PRESENT( graupelncv ) ) THEN
              graupamt = graupelncv(i,j)
-         ELSE
-             graupamt = 0.
-         ENDIF
+!         ELSE
+!             graupamt = 0.
+!         ENDIF
          if((prcpncfr + prcpcufr) > 0.) then
 ! -- calculate snow, graupel and ice fractions in falling frozen precip
          snowrat=min(1.,max(0.,snowncv(i,j)/(prcpncfr + prcpcufr)))
@@ -1681,7 +1681,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 !-----------------------------------------------------------------
    integer,   parameter      ::      ilsnow=99 
         
-   logical :: exist 
+   logical :: exist, ISMELT
 
 
    IF ( debug_print ) THEN
@@ -1932,7 +1932,22 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 
    ENDIF ! newsn > 0.
 
-   IF(SNHEI.GT.0.0) THEN
+   IF (ISFPE) THEN
+     IF(SNOWFRAC.GT.0.01) THEN
+       ISMELT = .TRUE.
+     ELSE
+       ISMELT = .FALSE.
+     END IF
+   ELSE
+     IF(SNHEI.GT.0.0) THEN
+       ISMELT = .TRUE.
+     ELSE
+       ISMELT = .FALSE.
+     END IF
+   END IF
+
+   !IF(SNHEI.GT.0.0) THEN
+   IF(ISMELT) THEN
      !-- SNOW on the ground
      !--- Land-use category should be changed to snow/ice for grid points with snow>0
      ILAND=ISICE
@@ -8014,106 +8029,29 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
 
         ! local:
         real :: conv_coeff   ! convection coefficient
+        real :: diff_coeff   ! diffusion coefficient
         integer :: i
+        real :: sum_prob = 0.0  ! artifical conservation     
 
         ! set the initial and boundary conditions for the first step
         IF (ktau .EQ. 1) THEN
           CALL SET_IC_BC
         END IF
-        
-        ! diffusion section
-        IF (snow_hei .GT. 0.01) THEN
-          CALL COMP_Diff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl)
-        END IF
+
+        ! calculate the diffusion coefficient of the FPE
+        CALL COMP_DiffCoeff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl, diff_coeff)
 
         ! calculate the convection coefficient of the FPE.
         CALL COMP_ConvCoeff(snow_melt, snow_sublim, snow_fall, rho_s, snow_hei, conv_coeff)
 
         ! sloving the FPE via a numerical scheme, a new PDF will be got.
-        CALL COMP_NumSchemFPE(cdt, conv_coeff)
+        CALL COMP_NumSchemFPE(cdt, conv_coeff, diff_coeff)
         
         ! calculate the mean snow depth based on the PDF.
         CALL COMP_AveSnowDepth(dep_mean, dep_std, dep_scf)
 
   END SUBROUTINE FPE_MODEL
-
-  SUBROUTINE COMP_Diff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl)
-    ! solving the diffusion section of the FPE
-
-    IMPLICIT NONE
-
-    ! INPUTS:
-    real :: cdt          ! current time step, namely time resolution
-    real :: snow_melt    ! snow melt rate [m/s]
-    real :: snow_fall    ! snow fall rate [m/s]
-    real :: rho_s        ! snowpack density
-    real :: snow_hei     ! snow height of previous time [m]
-    real :: wind_sp      ! wind speed [m/s]
-    real :: wind_zl      ! wind speed measured height [m]
-
-    ! local:
-    real :: diff_coeff   ! diffusion coefficient
-    real :: diff_coeff01   ! diffusion coefficient
-    real :: diff_coeff02   ! diffusion coefficient
-    real :: sub_dt       ! sub-time step
-    real :: z0 = 0.03    ! roughness height, assume open agricultural land without fences
-    real :: vk = 0.4     ! von Karmans constant
-    integer :: sub_ndt      ! total number of iteration steps
-    integer :: sub_i        ! index
-
-    ! estimating diffusion coefficient, all these formulas are empirical.
-    ! first, convert wind speed from the measured height to the shear wind speed
-    ! using logarithmic wind profile assumption.
-    wind_sp = wind_sp*vk/LOG(wind_zl/z0)   ! shear/fraction wind speed
-
-    IF (wind_sp .GT. 0.2) THEN
-      diff_coeff01 = 1E-10
-      IF (snow_fall .GT. 0.0) diff_coeff01 = 1E-7      ! empirical formula
-    ELSE
-      diff_coeff01 = 0.0
-    END IF
-
-    IF(snow_melt .GT. 0.0) THEN
-      diff_coeff02 = 0.95*85*EXP(-18.7)*snow_melt**0.5   ! empirical formula
-    ELSE
-      diff_coeff02 = 0.0
-    END IF
-
-    diff_coeff = diff_coeff01 + diff_coeff02
-
-    ! central difference for the diffusion term
-    IF(cdt*diff_coeff/dsnow/dsnow .GT. 0.48) THEN   ! stability condition is 0.5
-      sub_dt = 0.48*dsnow*dsnow/diff_coeff    ! get the maximum sub-time steps
-      sub_ndt = CEILING(cdt/sub_dt)     ! get the minimum number of steps 
-      sub_dt = cdt/sub_ndt              ! get the actual sub-time step
-      DO sub_i = 1, sub_ndt
-        SELECT CASE (scheme)
-          CASE (2)
-            CALL COMP_Fluxes_MUSCL(sub_dt, 0.0, diff_coeff)
-            CALL COMP_Update
-          CASE (3)
-            CALL COMP_Fluxes_Lax(sub_dt, 0.0, diff_coeff)
-            CALL COMP_Update
-          CASE DEFAULT
-            CALL COMP_Fluxes_Upwind(sub_dt, 0.0, diff_coeff)
-            CALL COMP_Update
-        END SELECT
-      END DO  ! end sub_i
-    ELSE
-      SELECT CASE (scheme)
-        CASE (2)
-          CALL COMP_Fluxes_MUSCL(cdt, 0.0, diff_coeff)
-          CALL COMP_Update
-        CASE (3)
-          CALL COMP_Fluxes_Lax(cdt, 0.0, diff_coeff)
-          CALL COMP_Update
-        CASE DEFAULT
-          CALL COMP_Fluxes_Upwind(cdt, 0.0, diff_coeff)
-          CALL COMP_Update
-      END SELECT
-    END IF
-  END SUBROUTINE COMP_Diff
-  
+ 
   SUBROUTINE SET_IC_BC
     ! setting initial and boundary conditions
 
@@ -8130,7 +8068,7 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     real, parameter :: pi = 3.1415926
 
     dep_mean_ini = 0.05 
-    dep_std_ini = 0.015
+    dep_std_ini = 0.005
 
     ! IC
     DO i = 1, nsnow+4
@@ -8182,12 +8120,62 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     dep_std = SQRT(dep_var)
 
     ! snow coverage fraction, it is assumed that snow depth less (SWE) than 0.01 m is no snow.
-    DO i = 3, int(0.02/dsnow)+3
+    DO i = 3, int(0.005/dsnow)+3
       dep_scf = dep_scf + old_prob(i)
     END DO
     dep_scf = MAX(0.0, 1.0-dep_scf)
 
   END SUBROUTINE COMP_AveSnowDepth
+  
+  SUBROUTINE COMP_DiffCoeff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl, diff_coeff)
+    ! estimating the diffusion coefficient
+
+    IMPLICIT NONE
+
+    ! INPUTS:
+    real :: cdt          ! current time step, namely time resolution
+    real :: snow_melt    ! snow melt rate [m/s]
+    real :: snow_fall    ! snow fall rate [m/s]
+    real :: rho_s        ! snowpack density
+    real :: snow_hei     ! snow height of previous time [m]
+    real :: wind_sp      ! wind speed [m/s]
+    real :: wind_zl      ! wind speed measured height [m]
+
+    ! local:
+    real :: diff_coeff   ! diffusion coefficient
+    real :: diff_coeff01   ! diffusion coefficient
+    real :: diff_coeff02   ! diffusion coefficient
+    real :: sub_dt       ! sub-time step
+    real :: z0 = 0.03    ! roughness height, assume open agricultural land without fences
+    real :: vk = 0.4     ! von Karmans constant
+    integer :: sub_ndt      ! total number of iteration steps
+    integer :: sub_i        ! index
+
+    ! estimating diffusion coefficient, all these formulas are empirical.
+    ! first, convert wind speed from the measured height to the shear wind speed
+    ! using logarithmic wind profile assumption.
+    
+    IF (snow_hei .LT. 0.01) THEN
+      diff_coeff = 0.0
+    ELSE
+      wind_sp = wind_sp*vk/LOG(wind_zl/z0)   ! shear/fraction wind speed
+  
+      IF (wind_sp .GT. 0.2) THEN
+        diff_coeff01 = 1E-10
+        IF (snow_fall .GT. 0.0) diff_coeff01 = snow_fall*1E-1      ! empirical formula
+      ELSE
+        diff_coeff01 = 0.0
+      END IF
+      IF(snow_melt .GT. 0.0) THEN
+        diff_coeff02 = 0.95*85*EXP(-18.7)*snow_melt**0.4   ! empirical formula
+      ELSE
+        diff_coeff02 = 0.0
+      END IF
+      diff_coeff = diff_coeff01 + diff_coeff02
+    END IF
+    !diff_coeff = 0.0
+
+  END SUBROUTINE COMP_DiffCoeff
   
   SUBROUTINE COMP_ConvCoeff(snow_melt, snow_sublim, snow_fall, rho_s, snow_hei, conv_coeff)
     ! calculating convection coefficient of the FPE. With this subroutine, all the variables
@@ -8224,25 +8212,43 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
       conv_coeff = part_1 + part_2 - 0.2*part_3 
     END IF
 
-
   END SUBROUTINE COMP_ConvCoeff
-  
-  SUBROUTINE COMP_NumSchemFPE(cdt, conv_coeff)
+
+  SUBROUTINE COMP_NumSchemFPE(cdt, conv_coeff, diff_coeff)
     ! solving the FPE, namely the advection-diffusion equation.
+    ! the convection and diffusion equations are solved separately.
 
     IMPLICIT NONE
 
     ! INPUTS:
     real :: cdt           ! current time step
     real :: conv_coeff    ! convection coefficient
-    !real,dimension(nsnow+4) :: old_prob  ! probability density function
+    real :: diff_coeff    ! diffusion coefficient
 
-    ! OUTPUTS:
-    !real,dimension(nsnow+4) :: new_prob  ! probability density function
-
+    ! local:
+    real :: sub_dt        ! sub-time step
+    integer :: sub_ndt    ! total number of iteration steps
+    integer :: sub_i      ! index
+    
+    ! solved convection equation first
     IF (ABS(conv_coeff) .GT. CFL*dsnow/cdt) THEN
       ! sub-loop for stability 
-      CALL Sub_COMP_Loop(cdt, conv_coeff)      
+      sub_dt = CFL*dsnow/ABS(conv_coeff)   ! get the maximum sub-time step  
+      sub_ndt = CEILING(cdt/sub_dt)   ! get the minimum number of steps required
+      sub_dt = cdt/sub_ndt            ! get the actual sub-time step
+      DO sub_i = 1, sub_ndt
+        SELECT CASE (scheme)
+          CASE (2)
+            CALL COMP_Fluxes_MUSCL(sub_dt, conv_coeff, 0.0)
+            CALL COMP_Update
+          CASE (3)
+            CALL COMP_Fluxes_Lax(sub_dt, conv_coeff, 0.0)
+            CALL COMP_Update
+          CASE DEFAULT
+            CALL COMP_Fluxes_Upwind(sub_dt, conv_coeff, 0.0)
+            CALL COMP_Update
+        END SELECT
+      END DO  ! end sub_i
     ELSE
       SELECT CASE (scheme)
         CASE (2)
@@ -8257,42 +8263,39 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
       END SELECT
     END IF
 
-  END SUBROUTINE COMP_NumSchemFPE
-
-  SUBROUTINE Sub_COMP_Loop(cdt, conv_coeff)
-    ! sub-loop for stability
-
-    IMPLICIT NONE
-
-    ! INPUTS:
-    real :: cdt           ! current time step
-    real :: conv_coeff    ! convection coefficient
-
-    ! local:
-    real :: sub_dt        ! sub-time step
-    integer :: sub_ndt    ! total number of iteration steps
-    integer :: sub_i      ! index
-
-    sub_dt = CFL*dsnow/ABS(conv_coeff)   ! get the maximum sub-time step  
-    sub_ndt = CEILING(cdt/sub_dt)   ! get the minimum number of steps required
-    sub_dt = cdt/sub_ndt            ! get the actual sub-time step
-    PRINT*, 'sub-loop:', sub_dt, sub_ndt
-    DO sub_i = 1, sub_ndt
+    ! central difference for the diffusion term
+    IF(cdt*diff_coeff/dsnow/dsnow .GT. 0.48) THEN   ! stability condition is 0.5
+      sub_dt = 0.48*dsnow*dsnow/diff_coeff    ! get the maximum sub-time steps
+      sub_ndt = CEILING(cdt/sub_dt)     ! get the minimum number of steps 
+      sub_dt = cdt/sub_ndt              ! get the actual sub-time step
+      DO sub_i = 1, sub_ndt
+        SELECT CASE (scheme)
+          CASE (2)
+            CALL COMP_Fluxes_MUSCL(sub_dt, 0.0, diff_coeff)
+            CALL COMP_Update
+          CASE (3)
+            CALL COMP_Fluxes_Lax(sub_dt, 0.0, diff_coeff)
+            CALL COMP_Update
+          CASE DEFAULT
+            CALL COMP_Fluxes_Upwind(sub_dt, 0.0, diff_coeff)
+            CALL COMP_Update
+        END SELECT
+      END DO  ! end sub_i
+    ELSE
       SELECT CASE (scheme)
         CASE (2)
-          CALL COMP_Fluxes_MUSCL(sub_dt, conv_coeff, 0.0)
+          CALL COMP_Fluxes_MUSCL(cdt, 0.0, diff_coeff)
           CALL COMP_Update
         CASE (3)
-          CALL COMP_Fluxes_Lax(sub_dt, conv_coeff, 0.0)
+          CALL COMP_Fluxes_Lax(cdt, 0.0, diff_coeff)
           CALL COMP_Update
         CASE DEFAULT
-          CALL COMP_Fluxes_Upwind(sub_dt, conv_coeff, 0.0)
+          CALL COMP_Fluxes_Upwind(cdt, 0.0, diff_coeff)
           CALL COMP_Update
       END SELECT
+    END IF
 
-    END DO  ! sub_ndt
-
-  END SUBROUTINE Sub_COMP_Loop
+  END SUBROUTINE COMP_NumSchemFPE
 
   SUBROUTINE COMP_Update
     ! update the old_prob to the new_prob
@@ -8421,6 +8424,73 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     
   END SUBROUTINE COMP_Fluxes_MUSCL
   
+  SUBROUTINE COMP_Fluxes_MUSCL_Conserv(cdt, conv_coeff, diff_coeff)
+    ! MUSCL scheme
+
+    IMPLICIT NONE
+
+    ! INPUTS:
+    real :: cdt           ! current time step
+    real :: conv_coeff    ! convection coefficient
+    real :: diff_coeff    ! diffusion coefficient
+
+    ! local:
+    real :: FP, FM        ! flux of the left and right
+    real :: ratioP, ratioM   ! gradient ratio
+    real :: rPL, rPR, rML, rMR, rPPR, rMML  ! ratio
+    real :: PPL, PPR, PML, PMR, PPPR, PMML  ! gradient
+!    real :: phi
+    real :: beta, beta2
+    integer :: j
+    real, dimension(nsnow+4) :: temp_prob   ! PDF of snow depth, boundary grids are included.
+
+    DO j = 3, nsnow+2
+      rPL = (old_prob(j+1) - old_prob(j))/(old_prob(j) - old_prob(j-1))   !+: i-1/2
+      rPR = (old_prob(j) - old_prob(j+1))/(old_prob(j+1) - old_prob(j+2)) !-: i+3/2
+      rML = (old_prob(j) - old_prob(j-1))/(old_prob(j-1) - old_prob(j-2)) !+: i-3/2
+      rMR = (old_prob(j-1) - old_prob(j))/(old_prob(j) - old_prob(j+1))   !-: i+1/2
+      IF ((j==3).OR.(j==4).OR.(j==nsnow+2).OR.(j==nsnow+1)) THEN
+        rPPR = old_prob(j+2)
+        rMML = old_prob(j-2)
+      ELSE
+        rPPR = (old_prob(j+1) - old_prob(j+2))/(old_prob(j+2) - old_prob(j+3)) !-: i+5/2
+        rMML = (old_prob(j-1) - old_prob(j-2))/(old_prob(j-2) - old_prob(j-3)) !+: i-5/2
+      END IF
+  
+      PPL = old_prob(j) + 0.5*phi(rPL)*(old_prob(j) - old_prob(j-1))
+      PPR = old_prob(j+1) - 0.5*phi(rPR)*(old_prob(j+2) - old_prob(j+1))
+      PML = old_prob(j-1) + 0.5*phi(rML)*(old_prob(j-1) - old_prob(j-2))
+      PMR = old_prob(j) - 0.5*phi(rMR)*(old_prob(j+1) - old_prob(j))
+      IF ((j==3).OR.(j==4).OR.(j==nsnow+2).OR.(j==nsnow+1)) THEN
+        PPPR = old_prob(j+2)
+        PMML = old_prob(j-2)
+      ELSE
+        PPPR = old_prob(j+2) - 0.5*phi(rPPR)*(old_prob(j+3) - old_prob(j+2))
+        PMML = old_prob(j-2) + 0.5*phi(rMML)*(old_prob(j-2) - old_prob(j-3))
+      END IF
+   
+      if (conv_coeff .GE. 0.0) then      
+        FP = conv_coeff*PPL - diff_coeff*(PPL-PML)/dsnow    ! flux
+        FM = conv_coeff*PML - diff_coeff*(PML-PMML)/dsnow   ! flux
+        !FP = conv_coeff*PPL - diff_coeff*(old_prob(j+1)-old_prob(j))/dsnow    ! flux
+        !FM = conv_coeff*PML - diff_coeff*(old_prob(j)-old_prob(j-1))/dsnow   ! flux
+      else
+        FP = conv_coeff*PPR - diff_coeff*(PPPR-PPR)/dsnow    ! flux
+        FM = conv_coeff*PMR - diff_coeff*(PPR-PMR)/dsnow   ! flux
+        !FP = conv_coeff*PPR - diff_coeff*(old_prob(j+1)-old_prob(j))/dsnow    ! flux
+        !FM = conv_coeff*PMR - diff_coeff*(old_prob(j)-old_prob(j-1))/dsnow   ! flux
+        if (j.EQ.3) FM = 0
+      end if
+  
+      if (j.EQ.3) then
+        new_prob(j) = old_prob(j) - cdt/dsnow*(FP - FM)  
+      else
+        new_prob(j) = old_prob(j) - cdt/dsnow*(FP - FM)   
+      end if
+    END DO
+    
+  END SUBROUTINE COMP_Fluxes_MUSCL_Conserv
+
   FUNCTION phi(x)
     ! flux limiter
     IMPLICIT NONE
@@ -8440,6 +8510,33 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     if ((abs(a) .GT. abs(b)) .AND. a*b .GT. 0.0) minmod = b
     if (a*b .LE. 0.0) minmod = 0.0
   END FUNCTION minmod
+  
+  SUBROUTINE COMP_Diff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl)
+    ! solving the diffusion section of the FPE
+
+    IMPLICIT NONE
+
+    ! INPUTS:
+    real :: cdt          ! current time step, namely time resolution
+    real :: snow_melt    ! snow melt rate [m/s]
+    real :: snow_fall    ! snow fall rate [m/s]
+    real :: rho_s        ! snowpack density
+    real :: snow_hei     ! snow height of previous time [m]
+    real :: wind_sp      ! wind speed [m/s]
+    real :: wind_zl      ! wind speed measured height [m]
+
+    ! local:
+    real :: diff_coeff   ! diffusion coefficient
+    real :: diff_coeff01   ! diffusion coefficient
+    real :: diff_coeff02   ! diffusion coefficient
+    real :: sub_dt       ! sub-time step
+    real :: z0 = 0.03    ! roughness height, assume open agricultural land without fences
+    real :: vk = 0.4     ! von Karmans constant
+    integer :: sub_ndt      ! total number of iteration steps
+    integer :: sub_i        ! index
+
+
+  END SUBROUTINE COMP_Diff  
 
 END MODULE module_sf_ruclsm
 
