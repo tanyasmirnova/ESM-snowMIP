@@ -170,7 +170,7 @@ CONTAINS
                                                         wind_sp
 
 !#if (EM_CORE==1)
-   REAL,       DIMENSION( ims:ime , jms:jme ),         &
+   REAL,       OPTIONAL, DIMENSION( ims:ime , jms:jme ),         &
                INTENT(IN   )    ::                   GRAUPELNCV, &
                                                         SNOWNCV, &
                                                         RAINNCV
@@ -723,11 +723,11 @@ CONTAINS
          PRCPMS   = (prcpncliq + prcpculiq)/DT*1.e-3
          NEWSNMS  = (prcpncfr + prcpcufr)/DT*1.e-3
 
-!         IF ( PRESENT( graupelncv ) ) THEN
+         IF ( PRESENT( graupelncv ) ) THEN
              graupamt = graupelncv(i,j)
-!         ELSE
-!             graupamt = 0.
-!         ENDIF
+         ELSE
+             graupamt = 0.
+         ENDIF
          if((prcpncfr + prcpcufr) > 0.) then
 ! -- calculate snow, graupel and ice fractions in falling frozen precip
          snowrat=min(1.,max(0.,snowncv(i,j)/(prcpncfr + prcpcufr)))
@@ -1295,7 +1295,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
        ac=0.
        as=0.
 
-       ac=max(0.,canwat(i,j)-canwatold(i,j))
+       ac=max(0.,canwat(i,j)-canwatold(i,j)*1.e3)
        as=max(0.,snwe-snowold(i,j))
        awb=rainbl(i,j)+smelt(i,j)*dt*1.e3 & ! source
 !       runoff2(i,j)=rainbl(i,j)+smelt(i,j)*dt*1.e3 & ! source
