@@ -5,6 +5,4 @@ dsnow    = 0.001               ! snow step
 nsnow    = 1000                ! total number of snow step
 scheme   = 2                  ! which scheme is used, 1 for upwind, 2 for MUSCL, and 3 for Lax-Wendroof
 CFL      = 0.5                ! CFL number
-eta_e    = 20                 ! viscosity coefficient, empirical [cm/h]
-mu       = 19                 ! viscosity coefficient, empirical [cm^3/g]
 /

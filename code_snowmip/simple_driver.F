@@ -289,6 +289,17 @@ program simple_driver
   real, dimension (1:ime,1:jme) :: LONGWAVE  ! Longwave radiation as read from the forcing data, which is immediately 
   !                                          ! adjusted (by the emissivity factor) to set variable LWDN.
 
+  real :: dsnow = 0.01                        ! snow step for solving FPE
+  integer :: nsnow = 200                      ! total number of snow step
+  integer :: scheme = 1                       ! which scheme is used, 1 for upwind, 2 for MUSCL, 3 for Lax-Wendroof
+  real :: CFL =0.5                            ! CFL number
+  logical :: ISFPE = .FALSE.                  ! FPE is actived or not
+  logical :: ISSWE = .TRUE.                   ! PDF is snow depth based or SWE based
+  real, allocatable, dimension (:,:,:) :: old_prob         ! probability density function, for keeping last step values
+  real, allocatable, dimension (:,:,:) :: new_prob         ! probability density function, for saving 
+  real, dimension (1:ime,1:jme) :: snow_std   ! standard deviation of snow 
+  real :: temporary
+
   integer :: i,j,k, kt
   !
   ! Get the command-line arguments
@@ -420,7 +431,7 @@ acsnow =0.0 ! - run total frozen precipitation
        albedo_monthly, shdfac_monthly,z0brd_monthly, lai_monthly, use_urban_module, isurban, shdmin(i,j),   &
        shdmax(i,j), usemonalb, rdlai2d, llanduse,iz0tlnd, sfcdif_option)
 
-  CALL open_FPEpara_file(FPEpara_filename)
+  CALL open_FPEpara_file(FPEpara_filename,ISFPE,ISSWE,nsnow,dsnow,scheme,CFL)   ! this probably can be coupled into the forcing file function later
 
   allocate( soilmois (1:ime, 1:nsoil ,1:jme) )
   allocate( sliqw (1:ime, 1:nsoil ,1:jme) )
@@ -432,6 +443,7 @@ acsnow =0.0 ! - run total frozen precipitation
   allocate( smfrfrac(1:ime, 1:nsoil ,1:jme) )
   allocate( zsmain(1:nsoil))
   allocate( zshalf(1:nsoil))
+  allocate( old_prob(ime,nsnow+4,jme), new_prob(ime,nsnow+4,jme)) ! FPE variables, nsnow is a global variable
 
   keepfr3dflag=0
 
@@ -1059,6 +1071,8 @@ acsnow =0.0 ! - run total frozen precipitation
                 sfcevp,ssoil,snowfallac,acsnow,snomlt,           &
                 smfr3d,keepfr3dflag,                             &
                 myj,shdmin*100.,shdmax*100.,rdlai2d,             &
+                old_prob,new_prob,snow_std,nsnow,dsnow,scheme,   &  ! FPE
+                CFL,ISFPE,ISSWE,                                 &  ! FPE
                 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1 )
 
     sneqv(i,j) = snow(i,j)*1.e-3
@@ -1212,8 +1226,9 @@ acsnow =0.0 ! - run total frozen precipitation
      !
      ! Write the output data for this timestep.
      !
+     IF(.NOT. ISFPE) nsnow=0    ! for output nc file
 
-     if (ktime == 1) call initialize_output(nsoil, 0, 0, 0, dt, iz0tlnd, sfcdif_option)
+     if (ktime == 1) call initialize_output(nsoil, 0, 0, 0, nsnow, dt, iz0tlnd, sfcdif_option)
 
      ! Time variable
      call output_time(ktime, nowdate,   "Times",   "UTC time of data output",                           "YYYYMMDD HH:mm"  )
@@ -1307,6 +1322,10 @@ acsnow =0.0 ! - run total frozen precipitation
      call output_var(ktime, min(273.,soilt1(i,j)),    "tsn",   "snow internal temperature",                  "K"             )
      call output_var(ktime, min(273.,t1(i,j)),        "tsns",  "snow surface temperature",                   "K"             )
 ! End of ESM-SnowMIP output`
+     IF (ISFPE) THEN
+       call output_var(ktime, snow_std(i,j), "FPE_snow_std", "standard deviation of snow", "m")
+       call output_levels(ktime, nsnow, "num_snow_layers", new_prob, "Probability", "probability of snow at certain value", "dimensionless" )
+     END IF
 
 if(1==2) then
      ! Multi-layer variables
@@ -1364,6 +1383,8 @@ if(1==2) then
 !     call output_var(ktime, smcdry,    "SMCDRY",  "Dry-soil soil moisture threshold",                  "m{3} m{-3}"    )
 !     call output_var(ktime, smcref,    "SMCREF",  "Soil moisture threshold for transpiration stress",  "m{3} m{-3}"    )
 !     call output_var(ktime, smcmax,    "SMCMAX",  "Saturated value of soil moisture (Porosity)",       "m{3} m{-3}"    )
+     
+
 endif
    print *,'finish_output_for_time(ktime)',ktime
      call finish_output_for_time(ktime)

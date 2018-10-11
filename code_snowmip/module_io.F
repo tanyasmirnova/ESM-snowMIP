@@ -13,12 +13,13 @@ contains
 !------------------------------------------------------------------------------------------------
 !------------------------------------------------------------------------------------------------
 
-  subroutine initialize_output ( nsoil, num_roof_layers, num_wall_layers, num_road_layers, dt, iz0tlnd, sfcdif_option )
+  subroutine initialize_output ( nsoil, num_roof_layers, num_wall_layers, num_road_layers, nsnow, dt, iz0tlnd, sfcdif_option )
     !
     ! Generic wrapper for the specific ASCII and NetCDF routines that do some initialization
     ! for the output tasks.  This needs to be called only once, before the first output calls.
     !
     implicit none
+    integer, intent(in) :: nsnow
     integer, intent(in) :: nsoil
     integer, intent(in) :: num_roof_layers
     integer, intent(in) :: num_wall_layers
@@ -29,7 +30,7 @@ contains
     
     if (OUTPUT_ASCII)  call initialize_ascii_output("OUTPUT.txt")
     if (OUTPUT_NETCDF) call initialize_netcdf_output("OUTPUT.nc", nsoil, num_roof_layers, num_wall_layers, &
-         num_road_layers, dt, iz0tlnd, sfcdif_option)
+         num_road_layers, nsnow, dt, iz0tlnd, sfcdif_option)
 
   end subroutine initialize_output
 

@@ -14,7 +14,7 @@ module module_ascii_io
 
 contains
 
-  SUBROUTINE open_FPEpara_file(filename)
+  SUBROUTINE open_FPEpara_file(filename,ISFPE,ISSWE,nsnow,dsnow,scheme,CFL)
     ! Get the configuration parameters for the FPE model
     ! These variables are set as global variables
     
@@ -23,15 +23,15 @@ contains
 
     !local:
     character (len=256) :: filename     ! configuration file name
+    real :: dsnow, CFL
+    integer :: nsnow, scheme
+    logical :: ISFPE, ISSWE
 
-    NAMELIST /FPE_parameters/ ISFPE, ISSWE, dsnow, nsnow, scheme, CFL, eta_e, mu
+    NAMELIST /FPE_parameters/ ISFPE, ISSWE, dsnow, nsnow, scheme, CFL
 
     OPEN(11, file=filename)
     READ(11, FPE_parameters)   ! read FPE parameters
     CLOSE(11)
-
-    ! allocate variables
-    ALLOCATE(old_prob(nsnow+4), new_prob(nsnow+4))
 
   END SUBROUTINE open_FPEpara_file
 
