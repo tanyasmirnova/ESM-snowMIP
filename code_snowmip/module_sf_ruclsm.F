@@ -56,6 +56,8 @@ CONTAINS
                    myj,shdmin,shdmax,rdlai2d,                    &
                    old_prob,new_prob,snow_std,nsnow,dsnow,scheme,&  ! FPE
                    CFL,ISFPE,ISSWE,                              &  ! FPE
+                   mean_A1,mean_A2,mean_A3,vari_A1,vari_A2,      &  ! FPE
+                   vari_A3,cov_A1A2,cov_A1A3,cov_A2A3,lat,       &  ! FPE
                    ids,ide, jds,jde, kds,kde,                    &
                    ims,ime, jms,jme, kms,kme,                    &
                    its,ite, jts,jte, kts,kte                     )
@@ -382,7 +384,7 @@ CONTAINS
    logical :: exist
    logical :: debug_print
    ! FPE
-   REAL,       INTENT(IN   )    ::     dsnow, CFL
+   REAL,       INTENT(IN   )    ::     dsnow, CFL, lat
    LOGICAL,    INTENT(IN   )    ::     ISFPE, ISSWE
    INTEGER,    INTENT(IN   )    ::     nsnow, scheme
    REAL,       DIMENSION( ims:ime , 1:nsnow+4, jms:jme )        , &
@@ -390,6 +392,10 @@ CONTAINS
    REAL,       DIMENSION(1:nsnow+4) :: old_prob1d,new_prob1d
    REAL,       DIMENSION( ims:ime , jms:jme )                   , &
                INTENT(INOUT)    ::                      snow_std
+   REAL,       DIMENSION( ims:ime , jms:jme )                   , &
+               INTENT(IN   )    ::  mean_A1, mean_A2, mean_A3,    &
+                                    vari_A1, vari_A2, vari_A3,    &
+                                    cov_A1A2,cov_A1A3,cov_A2A3   
 
    debug_print = .false.
  
@@ -1121,7 +1127,10 @@ CONTAINS
                 evapl(I,J),prcpl(I,J),budget(i,j),runoff1(i,j),  &
                 runoff2(I,J),soilice,soiliqw,infiltrp,smf(i,j),hfrain(i,j),snowcanr, &
                 old_prob1d,new_prob1d,snow_std(i,j),nsnow,      &
-                dsnow,scheme,CFL,ISFPE,ISSWE)
+                dsnow,scheme,CFL,ISFPE,ISSWE,                    & 
+                mean_A1(i,j),mean_A2(i,j),mean_A3(i,j),          &
+                vari_A1(i,j),vari_A2(i,j),vari_A3(i,j),          &
+                cov_A1A2(i,j),cov_A1A3(i,j),cov_A2A3(i,j),lat    )
 !-----------------------------------------------------------------
 
         DO k=1,nsnow+4
@@ -1504,7 +1513,10 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
                 evapl,prcpl,fltot,runoff1,runoff2,soilice,       &
                 soiliqw,infiltr,smf,hfrain,intersn,              &
                 old_prob1d,new_prob1d,snow_std1d,nsnow,          &
-                dsnow,scheme,CFL,ISFPE,ISSWE)
+                dsnow,scheme,CFL,ISFPE,ISSWE,                    &
+                mean_A11d,mean_A21d,mean_A31d,                   &
+                vari_A11d,vari_A21d,vari_A31d,                   &
+                cov_A1A21d,cov_A1A31d,cov_A2A31d,lat             )
 !-----------------------------------------------------------------
        IMPLICIT NONE
 !-----------------------------------------------------------------
@@ -1703,12 +1715,15 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 
    ! FPE variables
    real :: snow_melt, snow_sublim, snow_fall, dep_mean, dep_std, dep_scf
-   REAL,       INTENT(IN   )    ::     dsnow, CFL
+   REAL,       INTENT(IN   )    ::     dsnow, CFL, lat
    REAL,       INTENT(INOUT)    ::     snow_std1d
    LOGICAL,    INTENT(IN   )    ::     ISFPE, ISSWE
    INTEGER,    INTENT(IN   )    ::     nsnow, scheme
    REAL,       DIMENSION(1:nsnow+4)                            , &
                INTENT(INOUT)    ::         old_prob1d,new_prob1d
+   REAL,       INTENT(IN   )    ::     mean_A11d,mean_A21d,mean_A31d, &
+                                       vari_A11d,vari_A21d,vari_A31d, &
+                                       cov_A1A21d,cov_A1A31d,cov_A2A31d
 !-----------------------------------------------------------------
    integer,   parameter      ::      ilsnow=99 
         
@@ -1948,7 +1963,9 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
         CALL FPE_MODEL(DELT, ktau, snow_melt, snow_sublim, snow_fall, RHOSN,    & 
           SNHEI, tsnav, wind_sp, wind_zl, dep_mean,                             &
           dep_std, dep_scf, old_prob1d, new_prob1d, nsnow,                      &
-          dsnow, scheme, CFL, ISSWE)
+          dsnow, scheme, CFL, ISSWE,                                            &
+          mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,     &
+          cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, GSW)
         
         IF (ISSWE) THEN
           SNHEI = MAX(0.0, dep_mean*rhowater/RHOSN)       ! update sonow depth [m]
@@ -1966,7 +1983,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
    ENDIF ! newsn > 0.
 
    IF (ISFPE) THEN
-     IF(SNOWFRAC.GT.0.01) THEN
+     IF(SNOWFRAC.GT.1E-8) THEN
        ISMELT = .TRUE.
      ELSE
        ISMELT = .FALSE.
@@ -2295,7 +2312,10 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
             qfx,hfx,s,sublim,prcpl,fltot,runoff1,runoff2,       &
             mavail,soilice,soiliqw,infiltr,hfrain,              &
             old_prob1d,new_prob1d,snow_std1d,nsnow,             &
-            dsnow,scheme,CFL,ISFPE,ISSWE)
+            dsnow,scheme,CFL,ISFPE,ISSWE,                       &
+                mean_A11d,mean_A21d,mean_A31d,                   &
+                vari_A11d,vari_A21d,vari_A31d,                   &
+                cov_A1A21d,cov_A1A31d,cov_A2A31d,lat,nowdate    )
 
        IF(ISFPE) snowfrac=snfr
      else
@@ -2488,7 +2508,9 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
         CALL FPE_MODEL(DELT, ktau, snow_melt, snow_sublim, snow_fall, RHOSN,    & 
           SNHEI, tsnav, wind_sp, wind_zl, dep_mean,                             &
           dep_std, dep_scf, old_prob1d, new_prob1d, nsnow,                      &
-          dsnow, scheme, CFL, ISSWE)
+          dsnow, scheme, CFL, ISSWE,                                            &
+          mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,     &
+          cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, GSW)
         
         IF (ISSWE) THEN
           SNHEI = MAX(0.0, dep_mean*rhowater/RHOSN)       ! update sonow depth [m]
@@ -3564,7 +3586,10 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
              prcpl,fltot,runoff1,runoff2,mavail,soilice,       &
              soiliqw,infiltrp,hfrain,                          &
              old_prob1d,new_prob1d,snow_std1d,nsnow,        &
-             dsnow,scheme,CFL,ISFPE,ISSWE)
+             dsnow,scheme,CFL,ISFPE,ISSWE,                     &
+                mean_A11d,mean_A21d,mean_A31d,                   &
+                vari_A11d,vari_A21d,vari_A31d,                   &
+                cov_A1A21d,cov_A1A31d,cov_A2A31d,lat,nowdate    )
 
 !***************************************************************
 !   Energy and moisture budget for snow, heat diffusion eqns.
@@ -3784,12 +3809,16 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
    REAL                        ::  RNET, X
 
    ! FPE
-   REAL,       INTENT(IN   )    ::     dsnow, CFL
+   REAL,       INTENT(IN   )    ::     dsnow, CFL, lat
    REAL,       INTENT(INOUT)    ::     snow_std1d
    LOGICAL,    INTENT(IN   )    ::     ISFPE, ISSWE
    INTEGER,    INTENT(IN   )    ::     nsnow, scheme
    REAL,       DIMENSION(1:nsnow+4)                            , &
                INTENT(INOUT)    ::         old_prob1d,new_prob1d
+   REAL,       INTENT(IN   )    ::     mean_A11d,mean_A21d,mean_A31d, &
+                                       vari_A11d,vari_A21d,vari_A31d, &
+                                       cov_A1A21d,cov_A1A31d,cov_A2A31d
+   CHARACTER(len=12), INTENT(IN   )  :: nowdate      ! YYYYMMDDHHMM
 !-----------------------------------------------------------------
         cvw=cw
         XLMELT=3.35E+5
@@ -4074,7 +4103,10 @@ print *, 'TSO before calling SNOWTEMP: ', tso
              tso,soilt,soilt1,tsnav,qvg,qsg,qcg,              &
              smelt,snoh,snflx,s,ilnb,x,hfrain,                &
              old_prob1d,new_prob1d,snow_std1d,nsnow,       &
-             dsnow,scheme,CFL,ISFPE,ISSWE)
+             dsnow,scheme,CFL,ISFPE,ISSWE,                    &
+                mean_A11d,mean_A21d,mean_A31d,                   &
+                vari_A11d,vari_A21d,vari_A31d,                   &
+                cov_A1A21d,cov_A1A31d,cov_A2A31d,lat,nowdate   )
 
 !************************************************************************
 !--- RECALCULATION OF DEW USING NEW VALUE OF QSG OR TRANSP IF NO DEW
@@ -5374,7 +5406,10 @@ endif ! 1==2
            TSO,SOILT,SOILT1,TSNAV,QVG,QSG,QCG,                     &
            SMELT,SNOH,SNFLX,S,ILNB,X,hfrain,                       &
            old_prob1d,new_prob1d,snow_std1d,nsnow,              &
-           dsnow,scheme,CFL,ISFPE,ISSWE)
+           dsnow,scheme,CFL,ISFPE,ISSWE,                           &
+                mean_A11d,mean_A21d,mean_A31d,                   &
+                vari_A11d,vari_A21d,vari_A31d,                   &
+                cov_A1A21d,cov_A1A31d,cov_A2A31d,lat,nowdate       )
 
 !********************************************************************
 !   Energy budget equation and heat diffusion eqn are 
@@ -5551,12 +5586,16 @@ endif ! 1==2
 
    ! FPE variables
    real :: snow_melt, snow_sublim, snow_fall, dep_mean, dep_std, dep_scf
-   REAL,       INTENT(IN   )    ::     dsnow, CFL
+   REAL,       INTENT(IN   )    ::     dsnow, CFL, lat
    REAL,       INTENT(INOUT)    ::     snow_std1d
    LOGICAL,    INTENT(IN   )    ::     ISFPE, ISSWE
    INTEGER,    INTENT(IN   )    ::     nsnow, scheme
    REAL,       DIMENSION(1:nsnow+4)                            , &
                INTENT(INOUT)    ::         old_prob1d,new_prob1d
+   REAL,       INTENT(IN   )    ::     mean_A11d,mean_A21d,mean_A31d, &
+                                       vari_A11d,vari_A21d,vari_A31d, &
+                                       cov_A1A21d,cov_A1A31d,cov_A2A31d
+   CHARACTER(len=12), INTENT(IN   )  :: nowdate      ! YYYYMMDDHHMM
 
 !-----------------------------------------------------------------
        iter = 0
@@ -5980,6 +6019,7 @@ endif ! 1==2
           print *,'2- SMELT',i,j,smelt
         ENDIF
         SMELT=AMAX1(0.,SMELT)
+        print*, 'SNOH=',SNOH,RNET,QFX,HFX,SOH,X,SMELT
         
         !18apr08 - Egglston limit
         SMELT= amin1 (smelt, delt/60.*5.6E-8*meltfactor*max(1.,(soilt-273.15)))
@@ -6131,7 +6171,9 @@ endif ! 1==2
         CALL FPE_MODEL(DELT, ktau, snow_melt, snow_sublim, snow_fall, RHOSN,    & 
           SNHEI, tsnav, wind_sp, wind_zl, dep_mean,                             &
           dep_std, dep_scf, old_prob1d, new_prob1d, nsnow,                      &
-          dsnow, scheme, CFL, ISSWE)
+          dsnow, scheme, CFL, ISSWE,                                            &
+          mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,     &
+          cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, GSW)
         
         IF (ISSWE) THEN
           SNHEI = MAX(0.0, dep_mean*rhowater/RHOSN)       ! update sonow depth [m]
@@ -8054,7 +8096,9 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
   SUBROUTINE FPE_MODEL(cdt, ktau, snow_melt, snow_sublim, snow_fall, rho_s, &
                         snow_hei, snow_temp, wind_sp, wind_zl, dep_mean,    &
                         dep_std, dep_scf, old_prob1d, new_prob1d, nsnow,    &
-                        dsnow, scheme, CFL, ISSWE)
+                        dsnow, scheme, CFL, ISSWE,                          &
+                        mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,     &
+                        cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, gsw1d)
 
         ! The Fokker-Planck Equation (FPE) model is a sub-grid variability model for
         ! snow depth. This is a stochastic model and the snow depths are given
@@ -8088,6 +8132,12 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
         INTEGER,    INTENT(IN   )    ::     nsnow, scheme
         REAL,       DIMENSION(1:nsnow+4)                            , &
                     INTENT(INOUT)    ::         old_prob1d,new_prob1d
+        REAL,       INTENT(IN   )    ::     mean_A11d,mean_A21d,mean_A31d, &          
+                                            vari_A11d,vari_A21d,vari_A31d, &
+                                            cov_A1A21d,cov_A1A31d,cov_A2A31d
+        CHARACTER(len=12), INTENT(IN   )  :: nowdate   ! date and time
+        real :: lat                                    ! latitude [degree]
+        real :: gsw1d                                  ! showwave radiation
 
         ! OUTPUTS:
     	real :: dep_mean               ! mean of snow depth
@@ -8105,8 +8155,17 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
           CALL SET_IC_BC(old_prob1d, new_prob1d, nsnow, dsnow)
         END IF
 
+        ! calculate the mean snow depth based on the PDF.
+        CALL COMP_AveSnowDepth(nsnow, dsnow, old_prob1d, dep_mean, dep_std, dep_scf)
+        
+        IF((dep_std/dep_mean) < 0.8) THEN
         ! calculate the diffusion coefficient of the FPE
-        CALL COMP_DiffCoeff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl, diff_coeff)
+        CALL COMP_DiffCoeff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl, diff_coeff, &
+                        mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,     &
+                        cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, gsw1d)
+        ELSE
+          diff_coeff = 0.0
+        END IF
 
         ! calculate the convection coefficient of the FPE.
         CALL COMP_ConvCoeff(snow_melt, snow_sublim, snow_fall, rho_s, snow_hei, conv_coeff, ISSWE)
@@ -8154,7 +8213,7 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     old_prob1d(nsnow+4) = old_prob1d(nsnow+2)
     
     DO i = 1, nsnow+4
-      new_prob1d(i) = old_prob1d(i)*dsnow   ! normalizing between (0,1)
+      new_prob1d(i) = old_prob1d(i)   ! normalizing between (0,1)
     END DO
 
   END SUBROUTINE SET_IC_BC
@@ -8195,14 +8254,16 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     dep_std = SQRT(dep_var)
 
     ! snow coverage fraction, it is assumed that snow depth less (SWE) than 0.01 m is no snow.
-    DO i = 3, int(0.005/dsnow)+3
+    DO i = 3, int(0.001/dsnow)+3
       dep_scf = dep_scf + new_prob1d(i)
     END DO
     dep_scf = MAX(0.0, 1.0-dep_scf)
 
   END SUBROUTINE COMP_AveSnowDepth
   
-  SUBROUTINE COMP_DiffCoeff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl, diff_coeff)
+  SUBROUTINE COMP_DiffCoeff(cdt, snow_melt, snow_fall, rho_s, snow_hei, wind_sp, wind_zl, diff_coeff, &
+                        mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,             &
+                        cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, gsw1d)
     ! estimating the diffusion coefficient
 
     IMPLICIT NONE
@@ -8215,6 +8276,12 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     real :: snow_hei     ! snow height of previous time [m]
     real :: wind_sp      ! wind speed [m/s]
     real :: wind_zl      ! wind speed measured height [m]
+    CHARACTER(len=12), INTENT(IN   )  :: nowdate   ! date and time
+    real :: lat                                    ! latitude [degree]
+    real :: gsw1d                                  ! showwave radiation
+    REAL ::     mean_A11d,mean_A21d,mean_A31d, &          
+                vari_A11d,vari_A21d,vari_A31d, &
+                cov_A1A21d,cov_A1A31d,cov_A2A31d
 
     ! local:
     real :: diff_coeff   ! diffusion coefficient
@@ -8236,21 +8303,89 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
       wind_sp = wind_sp*vk/LOG(wind_zl/z0)   ! shear/fraction wind speed
   
       IF (wind_sp .GT. 0.2) THEN
-        diff_coeff01 = 1E-10
+        !diff_coeff01 = 1E-10
         IF (snow_fall .GT. 0.0) diff_coeff01 = snow_fall*1E-1      ! empirical formula
       ELSE
         diff_coeff01 = 0.0
       END IF
       IF(snow_melt .GT. 0.0) THEN
-        diff_coeff02 = 0.95*85*EXP(-18.7)*snow_melt**0.4   ! empirical formula
+        CALL snowmelt_diff_coeff(mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,     &
+          cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, gsw1d, diff_coeff02)
+        !diff_coeff02 = 0.95*85*EXP(-18.7)*snow_melt**0.4   ! empirical formula
       ELSE
         diff_coeff02 = 0.0
       END IF
-      diff_coeff = diff_coeff01 + diff_coeff02
+      !diff_coeff02 = 0.0
+      diff_coeff = diff_coeff01 + diff_coeff02*0.001
     END IF
     !diff_coeff = 0.0
 
   END SUBROUTINE COMP_DiffCoeff
+  
+  SUBROUTINE snowmelt_diff_coeff(mean_A11d, mean_A21d, mean_A31d, vari_A11d, vari_A21d, vari_A31d,     &
+      cov_A1A21d, cov_A1A31d, cov_A2A31d, nowdate, lat, gsw1d, diff_coeff02)
+    ! estimating diffusion coefficient from subgrid variability of solar radiation for snowmelt section
+
+    IMPLICIT NONE
+    CHARACTER(len=12), INTENT(IN   )  :: nowdate   ! date and time
+    real :: lat                                    ! latitude [degree]
+    real :: gsw1d                                  ! showwave radiation
+    real :: diff_coeff02                           ! diffusion coefficient
+    REAL ::     mean_A11d,mean_A21d,mean_A31d, &   ! terrain information
+                vari_A11d,vari_A21d,vari_A31d, &
+                cov_A1A21d,cov_A1A31d,cov_A2A31d
+
+    ! local variables
+    real :: C1, C2, C3      ! Sun's location parameters
+    real :: time            ! local (solar) time, 0-24
+    integer :: day_num      ! day number, 1-365
+    integer :: year, mon, day     ! month, day
+    real :: jprime          ! day angle [rad]
+    real :: T               ! hour angle [rad]
+    real :: delta           ! decline angle [rad]
+    real :: sin_alpha, cos_alpha   ! trigonometric function of Sun's elevation angle 
+    real :: sin_gamma, cos_gamma   ! trigon0metric function  of Sun's azimuth angle
+    real, parameter :: pi = 3.1415926
+    real :: vari_coeff01, vari_coeff02, vari_coeff     ! coefficient for variance
+    real :: mean_coeff                     ! coefficient for mean
+    real :: Lf = 0.334E6     ! latent heat of fusion [J/kg]
+    real :: B = 0.96         ! thermal quality of the snowpack
+
+    ! get time and day from nowdate
+    read(nowdate(1:4),*) year   ! year
+    read(nowdate(5:6),*) mon    ! month
+    read(nowdate(7:8),*) day    ! day
+    read(nowdate(9:10),*) time  ! hour
+
+    CALL day_number(year,mon,day,day_num)
+    !print*, 'date(FPE_MODEL)=',nowdate,year,mon,day,time,day_num
+    !print*, 'mean(FPE_MODEL)=',mean_A11d,mean_A21d,mean_A31d
+    !print*, 'vari(FPE_MODEL)=',vari_A11d,vari_A21d,vari_A31d
+    !print*, 'cov(FPE_MODEL)=',cov_A1A21d,cov_A1A31d,cov_A2A31d
+
+    ! calculate solar parameters
+    lat = lat*pi/180.0        ! degree to rad
+    T = 0.261799*(time-12)    ! hour angle [rad]
+    jprime = 2.0*pi*day_num/365.25      ! day angle [rad]
+    delta = ASIN(0.3978*SIN(jprime-1.4+0.0355*SIN(jprime-0.0489)))   ! declination angle [rad]
+    sin_alpha = COS(delta)*COS(lat)*COS(T) + SIN(delta)*SIN(lat)   
+    cos_alpha = (1.0-sin_alpha**2)**0.5
+    cos_gamma = MIN(1.0, MAX(-1.0, (SIN(delta)*COS(lat) - COS(delta)*SIN(lat)*COS(T))/cos_alpha))
+    sin_gamma = (1.0-cos_gamma**2)**0.5
+    C1 = cos_alpha*sin_gamma
+    C2 = cos_alpha*cos_gamma
+    C3 = sin_alpha
+
+    mean_coeff = mean_A11d*C1 + mean_A21d*C2 + mean_A31d*C3
+    vari_coeff01 = vari_A11d*C1**2 + vari_A21d*C2**2 + vari_A31d*C3**2
+    vari_coeff02 = 2*(C1*C2*cov_A1A21d + C1*C3*cov_A1A31d + C2*C3*cov_A2A31d)
+    vari_coeff = vari_coeff01 + vari_coeff02
+
+    diff_coeff02 = gsw1d**2*vari_coeff/mean_coeff/mean_coeff   ! diffusion coeff since solar radiation
+
+    diff_coeff02 = diff_coeff02/(Lf*rhowater*B)    ! can be used directly
+
+  END SUBROUTINE snowmelt_diff_coeff
   
   SUBROUTINE COMP_ConvCoeff(snow_melt, snow_sublim, snow_fall, rho_s, snow_hei, conv_coeff, ISSWE)
     ! calculating convection coefficient of the FPE. With this subroutine, all the variables
@@ -8422,12 +8557,13 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
       IF (conv_coeff .GE. 0.0) THEN
         FP = old_prob(i)     ! flux
         FM = old_prob(i-1)   ! flux
+        IF (i .EQ. (nsnow+2)) FP = 0.0 ! no flux boundary
       ELSE
         FP = old_prob(i+1)     ! flux
         FM = old_prob(i)       ! flux
         IF (i .EQ. 3) FM = 0.0 ! no flux boundary
       END IF
-
+        
       IF (i .EQ. 3) THEN
         new_prob(i) = old_prob(i) - conv_coeff*cdt/dsnow*(FP-FM) &
           + diff_coeff*cdt/dsnow/dsnow*(old_prob(i+1)-old_prob(i))
@@ -8436,6 +8572,12 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
           + diff_coeff*cdt/dsnow/dsnow*(old_prob(i+1)-2*old_prob(i)+old_prob(i-1))
       END IF
     END DO
+    
+    ! No-flux BC
+    !new_prob(1) = new_prob(3)
+    !new_prob(2) = new_prob(3)
+    !new_prob(nsnow+4) = new_prob(nsnow+2)
+
 
   END SUBROUTINE COMP_Fluxes_Upwind
 
@@ -8550,5 +8692,82 @@ print *,'INFMAX,INFMAX1,HYDRO(1)*SOILMOIS(1),-TOTLIQ', &
     if (a*b .LE. 0.0) minmod = 0.0
   END FUNCTION minmod
   
+  subroutine day_number(year,mon,day,day_num)
+    ! calculating the number of day in a year
+    implicit none
+    integer :: leap  ! leap year
+    integer :: year, mon, day, day_num
+    ! leap year
+    if (mod(year,100)==0) then
+      if (mod(year,400)==0) then
+        leap = 1  ! leap year
+      else
+        leap = 0
+      end if
+    else
+      if (mod(year,4)==0) then
+        leap = 1  ! leap year
+      else
+        leap = 0
+      end if
+    end if
+    
+    !  day number
+    if (leap==0) then
+      select case (mon)
+      case (1)
+        day_num=day
+      case (2)
+        day_num=31+day
+      case (3)
+        day_num=31+28+day
+      case (4)
+        day_num=31+28+31+day
+      case (5)
+        day_num=31+28+31+30+day
+      case (6)
+        day_num=31+28+31+30+31+day
+      case (7)
+        day_num=31+28+31+30+31+30+day
+      case (8)
+        day_num=31+28+31+30+31+30+31+day
+      case (9)
+        day_num=31+28+31+30+31+30+31+31+day
+      case (10)
+        day_num=31+28+31+30+31+30+31+31+30+day
+      case (11)
+        day_num=31+28+31+30+31+30+31+31+30+31+day
+      case (12)
+        day_num=31+28+31+30+31+30+31+31+30+31+30+day
+      end select
+    else
+      select case (mon)
+      case (1)   
+        day_num=day
+      case (2)
+        day_num=31+day
+      case (3)
+        day_num=31+29+day
+      case (4)
+        day_num=31+29+31+day
+      case (5)
+        day_num=31+29+31+30+day
+      case (6)
+        day_num=31+29+31+30+31+day
+      case (7)
+        day_num=31+29+31+30+31+30+day
+      case (8)
+        day_num=31+29+31+30+31+30+31+day
+      case (9)
+        day_num=31+29+31+30+31+30+31+31+day
+      case (10)
+        day_num=31+29+31+30+31+30+31+31+30+day
+      case (11)
+        day_num=31+29+31+30+31+30+31+31+30+31+day
+      case (12)
+        day_num=31+29+31+30+31+30+31+31+30+31+30+day
+      end select
+    end if
+  end subroutine day_number
 END MODULE module_sf_ruclsm
 

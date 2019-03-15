@@ -61,6 +61,9 @@ program simple_driver
   character(len=256) :: FPEpara_filename  ! The name of the FPE parameters file, as found
   !                                       ! by Fortran library function GETARG
   
+  character(len=256) :: Terrain_filename  ! The name of the FPE parameters file, as found
+  !                                       ! by Fortran library function GETARG
+  
   ! Loop increment variables:
   !
 
@@ -298,6 +301,9 @@ program simple_driver
   real, allocatable, dimension (:,:,:) :: old_prob         ! probability density function, for keeping last step values
   real, allocatable, dimension (:,:,:) :: new_prob         ! probability density function, for saving 
   real, dimension (1:ime,1:jme) :: snow_std   ! standard deviation of snow 
+  real, dimension (1:ime,1:jme) :: mean_A1, mean_A2, mean_A3   ! mean of A 
+  real, dimension (1:ime,1:jme) :: vari_A1, vari_A2, vari_A3   ! variance of A 
+  real, dimension (1:ime,1:jme) :: cov_A1A2, cov_A1A3, cov_A2A3   ! covariance of A 
   real :: temporary
 
   integer :: i,j,k, kt
@@ -308,6 +314,7 @@ program simple_driver
   call getarg(0, executable_name)
   call getarg(1, forcing_filename)
   call getarg(2, FPEpara_filename)
+  call getarg(3, Terrain_filename)
 
   if (forcing_filename == " ") then
      write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
@@ -320,6 +327,13 @@ program simple_driver
      write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
      write(*,'(" ***** Please specify the FPE parameters filename on the command-line.")')
      write(*,'(" ***** E.g.:  ''",A,1x,A,"''",/)') trim(executable_name), "sodanskyla.dat FPE.para"
+     stop ":  ERROR EXIT"
+  endif
+  
+  if (Terrain_filename == " ") then
+     write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
+     write(*,'(" ***** Please specify the terrain filename on the command-line.")')
+     write(*,'(" ***** E.g.:  ''",A,1x,A,"''",/)') trim(executable_name), "sodanskyla.dat FPE.para terrain.file"
      stop ":  ERROR EXIT"
   endif
   !
@@ -432,6 +446,9 @@ acsnow =0.0 ! - run total frozen precipitation
        shdmax(i,j), usemonalb, rdlai2d, llanduse,iz0tlnd, sfcdif_option)
 
   CALL open_FPEpara_file(FPEpara_filename,ISFPE,ISSWE,nsnow,dsnow,scheme,CFL)   ! this probably can be coupled into the forcing file function later
+  
+  CALL open_Terrain_file(Terrain_filename,ime,jme,mean_A1,mean_A2,mean_A3,vari_A1,vari_A2, &
+                        vari_A3,cov_A1A2,cov_A1A3,cov_A2A3)  ! get the terrain properties
 
   allocate( soilmois (1:ime, 1:nsoil ,1:jme) )
   allocate( sliqw (1:ime, 1:nsoil ,1:jme) )
@@ -1073,6 +1090,8 @@ acsnow =0.0 ! - run total frozen precipitation
                 myj,shdmin*100.,shdmax*100.,rdlai2d,             &
                 old_prob,new_prob,snow_std,nsnow,dsnow,scheme,   &  ! FPE
                 CFL,ISFPE,ISSWE,                                 &  ! FPE
+                mean_A1,mean_A2,mean_A3,vari_A1,vari_A2,         &  ! FPE
+                vari_A3,cov_A1A2,cov_A1A3,cov_A2A3,latitude,     &  ! FPE
                 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1 )
 
     sneqv(i,j) = snow(i,j)*1.e-3
@@ -1324,7 +1343,7 @@ acsnow =0.0 ! - run total frozen precipitation
 ! End of ESM-SnowMIP output`
      IF (ISFPE) THEN
        call output_var(ktime, snow_std(i,j), "FPE_snow_std", "standard deviation of snow", "m")
-       call output_levels(ktime, nsnow, "num_snow_layers", new_prob, "Probability", "probability of snow at certain value", "dimensionless" )
+       call output_levels(ktime, nsnow+4, "num_snow_layers", new_prob, "Probability", "probability of snow at certain value", "dimensionless" )
      END IF
 
 if(1==2) then

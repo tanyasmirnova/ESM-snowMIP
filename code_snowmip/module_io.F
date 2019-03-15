@@ -30,7 +30,7 @@ contains
     
     if (OUTPUT_ASCII)  call initialize_ascii_output("OUTPUT.txt")
     if (OUTPUT_NETCDF) call initialize_netcdf_output("OUTPUT.nc", nsoil, num_roof_layers, num_wall_layers, &
-         num_road_layers, nsnow, dt, iz0tlnd, sfcdif_option)
+         num_road_layers, nsnow+4, dt, iz0tlnd, sfcdif_option)
 
   end subroutine initialize_output
 

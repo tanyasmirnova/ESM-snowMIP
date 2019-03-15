@@ -14,6 +14,88 @@ module module_ascii_io
 
 contains
 
+  SUBROUTINE open_Terrain_file(filename,ime,jme,mean_A1,mean_A2,mean_A3,vari_A1,vari_A2,vari_A3,  &
+      cov_A1A2,cov_A1A3,cov_A2A3)
+    ! Get the terrain properties 
+    IMPLICIT NONE
+    
+    CHARACTER(len=12), INTENT(IN   )  :: filename                ! file name
+    INTEGER, INTENT(IN   )  :: ime, jme 
+    real, dimension (1:ime,1:jme) :: mean_A1, mean_A2, mean_A3   ! mean of A
+    real, dimension (1:ime,1:jme) :: vari_A1, vari_A2, vari_A3   ! variance of A
+    real, dimension (1:ime,1:jme) :: cov_A1A2, cov_A1A3, cov_A2A3   ! covariance of A
+    character(len=12) :: sub_file                                ! sub file name
+
+    integer :: i, j, k
+
+    OPEN(11, file=filename, action='read')
+    
+    READ(11,*) sub_file    ! mean_A1
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (mean_A1(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! mean_A2
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (mean_A2(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! mean_A3
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (mean_A3(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! vari_A1
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (vari_A1(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! vari_A2
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (vari_A2(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! vari_A3
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (vari_A3(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! cov_A1A2
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (cov_A1A2(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! cov_A1A3
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (cov_A1A3(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    READ(11,*) sub_file    ! cov_A2A3
+    OPEN(12, file=sub_file, action='read')
+    DO i = 1, ime
+      READ(12,*) (cov_A2A3(i,j), j=1,jme)
+    END DO ! end ime
+    CLOSE(12)
+
+    CLOSE(11)
+  END SUBROUTINE open_Terrain_file
+
   SUBROUTINE open_FPEpara_file(filename,ISFPE,ISSWE,nsnow,dsnow,scheme,CFL)
     ! Get the configuration parameters for the FPE model
     ! These variables are set as global variables
