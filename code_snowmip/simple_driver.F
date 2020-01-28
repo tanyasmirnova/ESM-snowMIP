@@ -1279,6 +1279,13 @@ acsnow =0.0 ! - run total frozen precipitation
      call output_levels(ktime, nsoil, "num_soil_layers", smcmass,"mrlsl",  "masses of frozen and unfrozen moisture in soil layers", "kg m{–2}"  )
      call output_var(ktime, sncovr(i,j),    "snc",   "snow area fraction",                         "fraction"      )
      call output_var(ktime, snowh(i,j),     "snd",   "snowdepth",                                  "m"             )
+ print *,'SND=',ktime,snowh(i,j)
+ if(snowh(i,j) > 0..and.snow(i,j) > 0.) then
+ print *,'SND1=',ktime,max(0.,snowh(i,j)-cmc(i,j)/ (SNOW(i,j)/SNOWH(i,j)))
+ print *,'CMC=',ktime,cmc(i,j)/ (SNOW(i,j)/SNOWH(i,j)),cmc(i,j)
+ else
+ print *,'SND1=',ktime,0.
+ endif
      call output_var(ktime, snow(i,j),      "snw",   "mass of snowpack",                           "kg m{–2}"      )
  print *,'SWE=',ktime,snow(i,j)
      call output_var(ktime, snowcan(i,j),   "snwc",  "mass of snow intercepted by vegetation",     "kg m{–2}"      )
