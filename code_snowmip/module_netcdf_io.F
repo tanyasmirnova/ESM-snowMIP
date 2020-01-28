@@ -14,6 +14,7 @@ module module_netcdf_io
   integer :: dimid_nroad
   integer :: output_ncid = -99999
   integer :: varid_times
+  integer :: dimid_nsnow
 
 
   interface get_from_netcdf_output
@@ -25,7 +26,7 @@ contains
 !------------------------------------------------------------------------------------------------
 !------------------------------------------------------------------------------------------------
 
-  subroutine initialize_netcdf_output(ncfilename, nsoil, num_roof_layers, num_wall_layers, num_road_layers, dt, iz0tlnd, sfcdif_option)
+  subroutine initialize_netcdf_output(ncfilename, nsoil, num_roof_layers, num_wall_layers, num_road_layers, nsnow, dt, iz0tlnd, sfcdif_option)
     implicit none
     character(len=*),       intent(in) :: ncfilename
     integer,                intent(in) :: nsoil
@@ -35,6 +36,7 @@ contains
     real,                   intent(in) :: dt
     integer,                intent(in) :: iz0tlnd
     integer,                intent(in) :: sfcdif_option
+    integer,                intent(in) :: nsnow
 
     integer :: iret
 
@@ -47,6 +49,11 @@ contains
     iret = nf90_def_dim(output_ncid, "num_soil_layers", nsoil, dimid_nsoil)
     call error_handler(iret, "Problem defining dimension")
     
+    if (nsnow > 0) then
+       iret = nf90_def_dim(output_ncid, "num_snow_layers", nsnow, dimid_nsnow)
+       call error_handler(iret, "Problem defining dimension")
+    endif
+
     if (num_roof_layers > 0) then
        iret = nf90_def_dim(output_ncid, "num_roof_layers", num_roof_layers, dimid_nroof)
        call error_handler(iret, "Problem defining dimension")

@@ -58,7 +58,12 @@ program simple_driver
   character(len=256) :: forcing_filename  ! The name of the initial/forcing conditions file, as found
   !                                       ! by Fortran library function GETARG
 
-  !
+  character(len=256) :: FPEpara_filename  ! The name of the FPE parameters file, as found
+  !                                       ! by Fortran library function GETARG
+  
+  character(len=256) :: Terrain_filename  ! The name of the FPE parameters file, as found
+  !                                       ! by Fortran library function GETARG
+  
   ! Loop increment variables:
   !
 
@@ -101,7 +106,7 @@ program simple_driver
   real    :: xice_threshold  ! threshold below which no ice
   integer :: ISURBAN    ! Vegetation category for urban land class.
   real    :: DT         ! Time step (seconds).
-  real    :: ZLVL       ! Height at which atmospheric forcing variables are taken to be valid (m)
+  !real    :: ZLVL       ! Height at which atmospheric forcing variables are taken to be valid (m)
   real    :: zlvl_wind  ! Height at which the wind forcing variable is taken to be valid (m)
   real, pointer, dimension(:) :: SLDPTH ! Thicknesses of each soil level
   integer :: NSOIL      ! Number of soil levels.
@@ -111,6 +116,7 @@ program simple_driver
   !                               ! "USGS" (USGS 24/27 category dataset) and
   !                               ! "MODIFIED_IGBP_MODIS_NOAH" (MODIS 20-category dataset)
   character(len=256) :: LSOIL     ! Soil-category dateset.  Only "STAS" (STATSGO dataset) supported.
+  real, dimension (1:ime,1:jme)    :: ZLVL       ! Height at which atmospheric forcing variables are taken to be valid (m)
   real, dimension (1:ime,1:jme)    :: LWDN       ! Downward longwave radiation flux at surface (W m-2) [Forcing]
   real, dimension (1:ime,1:jme)    :: SOLDN      ! Downward shortwave radiation flux at surface (W m-2) [Forcing]
   real, dimension (1:ime,1:jme)    :: SOLNET     ! Net downward shortwave radiation flux at the surface (W m-2)
@@ -286,6 +292,20 @@ program simple_driver
   real, dimension (1:ime,1:jme) :: LONGWAVE  ! Longwave radiation as read from the forcing data, which is immediately 
   !                                          ! adjusted (by the emissivity factor) to set variable LWDN.
 
+  real :: dsnow = 0.01                        ! snow step for solving FPE
+  integer :: nsnow = 200                      ! total number of snow step
+  integer :: scheme = 1                       ! which scheme is used, 1 for upwind, 2 for MUSCL, 3 for Lax-Wendroof
+  real :: CFL =0.5                            ! CFL number
+  logical :: ISFPE = .FALSE.                  ! FPE is actived or not
+  logical :: ISSWE = .TRUE.                   ! PDF is snow depth based or SWE based
+  real, allocatable, dimension (:,:,:) :: old_prob         ! probability density function, for keeping last step values
+  real, allocatable, dimension (:,:,:) :: new_prob         ! probability density function, for saving 
+  real, dimension (1:ime,1:jme) :: snow_std   ! standard deviation of snow 
+  real, dimension (1:ime,1:jme) :: mean_A1, mean_A2, mean_A3   ! mean of A 
+  real, dimension (1:ime,1:jme) :: vari_A1, vari_A2, vari_A3   ! variance of A 
+  real, dimension (1:ime,1:jme) :: cov_A1A2, cov_A1A3, cov_A2A3   ! covariance of A 
+  real :: temporary
+
   integer :: i,j,k, kt
   !
   ! Get the command-line arguments
@@ -293,6 +313,8 @@ program simple_driver
 
   call getarg(0, executable_name)
   call getarg(1, forcing_filename)
+  call getarg(2, FPEpara_filename)
+  call getarg(3, Terrain_filename)
 
   if (forcing_filename == " ") then
      write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
@@ -301,6 +323,19 @@ program simple_driver
      stop ":  ERROR EXIT"
   endif
 
+  if (FPEpara_filename == " ") then
+     write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
+     write(*,'(" ***** Please specify the FPE parameters filename on the command-line.")')
+     write(*,'(" ***** E.g.:  ''",A,1x,A,"''",/)') trim(executable_name), "sodanskyla.dat FPE.para"
+     stop ":  ERROR EXIT"
+  endif
+  
+  if (Terrain_filename == " ") then
+     write(*,'(/," ***** Problem:  Program expects a command-line argument *****")')
+     write(*,'(" ***** Please specify the terrain filename on the command-line.")')
+     write(*,'(" ***** E.g.:  ''",A,1x,A,"''",/)') trim(executable_name), "sodanskyla.dat FPE.para terrain.file"
+     stop ":  ERROR EXIT"
+  endif
   !
   ! Some defaults
   !
@@ -406,9 +441,14 @@ acsnow =0.0 ! - run total frozen precipitation
        latitude, longitude, &
        forcing_timestep, ruclsm_timestep, ice(i,j), t1(i,j), stc, smc, &
        sh2o, sldpth, cmc(i,j), snowh(i,j), &
-       sneqv(i,j), tbot(i,j),vegtyp(i,j), soiltyp(i,j), slopetyp(i,j), snoalb(i,j), zlvl, zlvl_wind,        &
+       sneqv(i,j), tbot(i,j),vegtyp(i,j), soiltyp(i,j), slopetyp(i,j), snoalb(i,j), zlvl(i,j), zlvl_wind,        &
        albedo_monthly, shdfac_monthly,z0brd_monthly, lai_monthly, use_urban_module, isurban, shdmin(i,j),   &
        shdmax(i,j), usemonalb, rdlai2d, llanduse,iz0tlnd, sfcdif_option)
+
+  CALL open_FPEpara_file(FPEpara_filename,ISFPE,ISSWE,nsnow,dsnow,scheme,CFL)   ! this probably can be coupled into the forcing file function later
+  
+  CALL open_Terrain_file(Terrain_filename,ime,jme,mean_A1,mean_A2,mean_A3,vari_A1,vari_A2, &
+                        vari_A3,cov_A1A2,cov_A1A3,cov_A2A3)  ! get the terrain properties
 
   allocate( soilmois (1:ime, 1:nsoil ,1:jme) )
   allocate( sliqw (1:ime, 1:nsoil ,1:jme) )
@@ -420,6 +460,7 @@ acsnow =0.0 ! - run total frozen precipitation
   allocate( smfrfrac(1:ime, 1:nsoil ,1:jme) )
   allocate( zsmain(1:nsoil))
   allocate( zshalf(1:nsoil))
+  allocate( old_prob(ime,nsnow+4,jme), new_prob(ime,nsnow+4,jme)) ! FPE variables, nsnow is a global variable
 
   keepfr3dflag=0
 
@@ -556,7 +597,7 @@ acsnow =0.0 ! - run total frozen precipitation
   nowdate = startdate
   ktime = 0
 
-  TIMELOOP : do while ( nowdate <= enddate)
+  TIMELOOP : do while ( nowdate <= enddate) 
 
      !
      ! Increment our counter KTIME and our time variable NOWDATE
@@ -564,9 +605,9 @@ acsnow =0.0 ! - run total frozen precipitation
 
      call geth_newdate(nowdate, startdate, ktime*(ruclsm_timestep/60))
      ktime = ktime + 1
-
-   print *,'nowdate=',nowdate,'enddate=',enddate
-   print *,'loop_for_a_while=',loop_for_a_while
+  
+     print *,'nowdate=',nowdate,'enddate=',enddate
+     print *,'loop_for_a_while=',loop_for_a_while
 
      !
      ! Check if we need to cycle back to our starting data
@@ -575,22 +616,20 @@ acsnow =0.0 ! - run total frozen precipitation
      if ((loop_for_a_while) .and. (nowdate == enddate)) then
         print*, 'Nowdate: '//nowdate//"  Switching to startdate: "//startdate
         call output_close()
-
-
-   print *,'nowdate=',nowdate
+   
+        print *,'nowdate=',nowdate
         write(teststr, '(I4.4)') reloop_count
-   print *,'reloop_count=',reloop_count,'teststr=',teststr
+        print *,'reloop_count=',reloop_count,'teststr=',teststr
         cmd =  "mv OUTPUT.nc OUTPUT."//trim(teststr)//".nc"
         reloop_count = reloop_count + 1
         call system(trim(cmd))
-
+   
         ktime = 1
         call read_forcing_text(iunit, nowdate, forcing_timestep,      &
-             sfcspd(i,j), sfcu, sfcv, tabs(i,j), q2(i,j),             &
-             sfcprs(i,j), soldn(i,j), longwave(i,j), prcp(i,j), snfall(i,j),kt,ierr)
-
+          sfcspd(i,j), sfcu, sfcv, tabs(i,j), q2(i,j),             &
+          sfcprs(i,j), soldn(i,j), longwave(i,j), prcp(i,j), snfall(i,j),kt,ierr)
+   
         if (ierr == 0) stop "Wrong input for looping a year."
-
         nowdate = startdate
         rewind(iunit)
 
@@ -602,7 +641,7 @@ acsnow =0.0 ! - run total frozen precipitation
      ! SFCSPD, SFCU, SFCV, TABS, Q2, SFCPRS, SOLDN, LONGWAVE, PRCP.
      !
 
-       print *,'nowdate=',nowdate, ' at reloop_count=',reloop_count
+     print *,'nowdate=',nowdate, ' at reloop_count=',reloop_count
      call read_forcing_text(iunit, nowdate, forcing_timestep,      &
           sfcspd(i,j), sfcu, sfcv, TABS(i,j), q2(i,j), sfcprs(i,j),&
           soldn(i,j), longwave(i,j), prcp(i,j), snfall(i,j),kt,ierr)
@@ -617,7 +656,7 @@ acsnow =0.0 ! - run total frozen precipitation
      ! frozen.
      !
 !tgs - any possibility to get mixed precipitation from the forcing?
-        FFROZP(i,j) = 0.0
+     FFROZP(i,j) = 0.0
      if ( (PRCP(i,j)+snfall(i,j)) > 0.) then
         FFROZP(i,j)=snfall(i,j)/(snfall(i,j)+prcp(i,j))
         FFROZP(i,j)=max(0.,min(1.,FFROZP(i,j)))
@@ -637,7 +676,7 @@ acsnow =0.0 ! - run total frozen precipitation
      !             RHO is used in LSMRUC.
      !
 
-     CALL CALTMP(t1(i,j), TABS(i,j), SFCPRS(i,j), ZLVL, Q2(i,j), TH2(i,j), t1V(i,j), TH2V(i,j), RHO(i,j)) ! Returns TH2, t1V, TH2V, RHO
+     CALL CALTMP(t1(i,j), TABS(i,j), SFCPRS(i,j), ZLVL(i,j), Q2(i,j), TH2(i,j), t1V(i,j), TH2V(i,j), RHO(i,j)) ! Returns TH2, t1V, TH2V, RHO
      CALL CALHUM(TABS(i,j), SFCPRS(i,j), Q2SAT(i,j), DQSDT2(i,j)) ! Returns Q2SAT, DQSDT2
 
      !
@@ -650,8 +689,8 @@ acsnow =0.0 ! - run total frozen precipitation
         albbck(i,j) = 0.18
      endif
 
-        Z0(i,j) = month_d(z0brd_monthly, nowdate)
-   if(sncovr(i,j) > 0.99) Z0(i,j) = 0.011
+     Z0(i,j) = month_d(z0brd_monthly, nowdate)
+     if(sncovr(i,j) > 0.99) Z0(i,j) = 0.011
 
      if ( sfcdif_option == 1 ) then
         z0brd  = z0
@@ -711,7 +750,7 @@ acsnow =0.0 ! - run total frozen precipitation
 
      else if ( SFCDIF_OPTION == 1 ) then
 
-        CALL SFCDIF_MYJ ( ZLVL, ZLVL_WIND , Z0(i,j) , Z0BRD(i,j) , SFCPRS(i,j) , t1(i,j) , TABS(i,j) , qsfc(i,j) , &
+        CALL SFCDIF_MYJ ( ZLVL(i,j), ZLVL_WIND , Z0(i,j) , Z0BRD(i,j) , SFCPRS(i,j) , t1(i,j) , TABS(i,j) , qsfc(i,j) , &
              Q2(i,j) , SFCSPD(i,j) , CZIL , RIBB , CM(i,j) , CH(i,j) , VEGTYP(i,j) , ISURBAN , IZ0TLND )
 
      endif
@@ -974,11 +1013,18 @@ acsnow =0.0 ! - run total frozen precipitation
 ! keepfr3dflag - flag for frozen soil physics: 0. or 1.
 ! add initialization here 
 ! temporary set fractional_seaice=0
-       fractional_seaice = 0
-  if ( fractional_seaice == 0 ) then
-     xice_threshold = 0.5
-  else if ( fractional_seaice == 1 ) then
+!       fractional_seaice = 0
+! if ( fractional_seaice == 0 ) then
+!    xice_threshold = 0.5
+! else if ( fractional_seaice == 1 ) then
+!    xice_threshold = 0.02
+! endif
+  
+  fractional_seaice = .FALSE.
+  if ( fractional_seaice) then
      xice_threshold = 0.02
+  else 
+     xice_threshold = 0.5
   endif
 
     xice(i,j) = ice(i,j)
@@ -1022,10 +1068,10 @@ acsnow =0.0 ! - run total frozen precipitation
     hfrain(i,j) = 0.
     esnow(i,j) = 0.
     snomlt(i,j) = 0.
-    CALL LSMRUC(local,dt,ktime,nsoil,                            &
+    CALL LSMRUC(nowdate,local,dt,ktime,nsoil,                            &
                 sldpth,rainbl,snow,snowh,sncovr,ffrozp,frpcpn,   &
-                rhosnf,graupelncv,snowncv,rainncv,precipfr,      &
-                zlvl*2.,sfcprs,tabs,q2,qcatm,rho,                & !p_phy in [pa]
+                rhosnf,graupelncv,snowncv,rainncv,precipfr,sfcspd,  &
+                zlvl_wind, zlvl*2.,sfcprs,tabs,q2,qcatm,rho,     & !p_phy in [pa]
                 longwave,solnet,emissi,ch,                       & !flqc,flhc,
                 mavail,cmc,shdfac*100.,albedo,z0,                &
                 z0brd,snoalb, albbck, xlai,                      &   !new
@@ -1042,6 +1088,10 @@ acsnow =0.0 ! - run total frozen precipitation
                 sfcevp,ssoil,snowfallac,acsnow,snomlt,           &
                 smfr3d,keepfr3dflag,                             &
                 myj,shdmin*100.,shdmax*100.,rdlai2d,             &
+                old_prob,new_prob,snow_std,nsnow,dsnow,scheme,   &  ! FPE
+                CFL,ISFPE,ISSWE,                                 &  ! FPE
+                mean_A1,mean_A2,mean_A3,vari_A1,vari_A2,         &  ! FPE
+                vari_A3,cov_A1A2,cov_A1A3,cov_A2A3,latitude,     &  ! FPE
                 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1, 1,1 )
 
     sneqv(i,j) = snow(i,j)*1.e-3
@@ -1195,8 +1245,9 @@ acsnow =0.0 ! - run total frozen precipitation
      !
      ! Write the output data for this timestep.
      !
+     IF(.NOT. ISFPE) nsnow=0    ! for output nc file
 
-     if (ktime == 1) call initialize_output(nsoil, 0, 0, 0, dt, iz0tlnd, sfcdif_option)
+     if (ktime == 1) call initialize_output(nsoil, 0, 0, 0, nsnow, dt, iz0tlnd, sfcdif_option)
 
      ! Time variable
      call output_time(ktime, nowdate,   "Times",   "UTC time of data output",                           "YYYYMMDD HH:mm"  )
@@ -1297,6 +1348,10 @@ acsnow =0.0 ! - run total frozen precipitation
      call output_var(ktime, min(273.,soilt1(i,j)),    "tsn",   "snow internal temperature",                  "K"             )
      call output_var(ktime, min(273.,t1(i,j)),        "tsns",  "snow surface temperature",                   "K"             )
 ! End of ESM-SnowMIP output`
+     IF (ISFPE) THEN
+       call output_var(ktime, snow_std(i,j), "FPE_snow_std", "standard deviation of snow", "m")
+       call output_levels(ktime, nsnow+4, "num_snow_layers", new_prob, "Probability", "probability of snow at certain value", "dimensionless" )
+     END IF
 
 if(1==2) then
      ! Multi-layer variables
@@ -1354,6 +1409,8 @@ if(1==2) then
 !     call output_var(ktime, smcdry,    "SMCDRY",  "Dry-soil soil moisture threshold",                  "m{3} m{-3}"    )
 !     call output_var(ktime, smcref,    "SMCREF",  "Soil moisture threshold for transpiration stress",  "m{3} m{-3}"    )
 !     call output_var(ktime, smcmax,    "SMCMAX",  "Saturated value of soil moisture (Porosity)",       "m{3} m{-3}"    )
+     
+
 endif
    print *,'finish_output_for_time(ktime)',ktime
      call finish_output_for_time(ktime)
@@ -1365,11 +1422,11 @@ endif
           stc(1:nsoil),smc(1:nsoil),sh2o(1:nsoil)
      endif
 !      loop_for_a_while = .true.
-    if (trim(teststr) > '0010') then
-        exit TIMELOOP
-        print *,'Spin-up and Main runs are finished'
-        stop
-    endif 
+!    if (trim(teststr) > '0010') then
+!        exit TIMELOOP
+!        print *,'Spin-up and Main runs are finished'
+!        stop
+!    endif 
   enddo TIMELOOP
 
 
