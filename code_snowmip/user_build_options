@@ -8,11 +8,11 @@ CPPMACROS	=	-D_SIMPLE_DRIVER_
 F90FLAGS	=       -convert big_endian -g -traceback -O0 -check all,noshape,nopointer,noarg_temp_created # -mp -fpe0
 CPP		=	cpp -C -P -nostdinc -traditional 
 LIBS		=
-NETCDFDIR	=	/apps/netcdf/3.6.3-intel
-# NETCDFDIR	=	/apps/netcdf/4.3.0-intel
+NETCDFDIR	=	/apps/netcdf/4.6.1/intel/16.1.150
 NETCDFINC	=	-I$(NETCDFDIR)/include
-NETCDFLIB	=	-L$(NETCDFDIR)/lib -lnetcdf
-NCARG_ROOT	=	/apps/ncl/6.3.0-nodap_gcc447
+NETCDFLIB	=	-L$(NETCDFDIR)/lib -lnetcdff
+#NETCDFLIB	=	-L$(NETCDFDIR)/lib -lnetcdf
+NCARG_ROOT	=	/apps/ncl/6.5.0
 RM		= 	rm -f
 CC		=	cc
 

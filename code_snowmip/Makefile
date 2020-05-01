@@ -4,7 +4,7 @@
 include user_build_options
 
 
-OBJS =	module_sf_ruclsm.o \
+OBJS =	module_sf_ruclsm_land.o \
 	module_model_constants.o \
 	kwm_date_utilities.o \
 	module_netcdf_io.o \
@@ -32,7 +32,7 @@ clean:
 	$(RM) $(OBJS) simple_driver.o $(CMD) *.mod *~
 
 driver.exe:		simple_driver.o
-module_sf_ruclsm.o:	module_model_constants.o
+module_sf_ruclsm_land.o:	module_model_constants.o
 simple_driver.o:	module_io.o
 simple_driver.o:	kwm_date_utilities.o
 simple_driver.o:	module_Noahlsm_utility.o
