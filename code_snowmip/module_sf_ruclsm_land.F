@@ -35,6 +35,7 @@ CONTAINS
     SUBROUTINE LSMRUC(                                           &
                    nowdate,LOCAL,DT,KTAU,NSL,ZS,                 &
                    RAINBL,SNOW,SNOWH,SNOWC,FRZFRAC,frpcpn,       &
+                   rhosn,smelt,snevap,                           &
                    rhosnf,graupelncv,snowncv,rainncv,            & !RHO of snowfall
                    precipfr, wind_sp,wind_zl,                    & ! pass it out to module_diagnostics
                    Z3D,P8W,T3D,QV3D,QC3D,RHO3D,                  & !p8W in [PA]
@@ -230,6 +231,9 @@ CONTAINS
                                                             HFX, &
                                                             QFX, &
                                                              LH, &
+                                                          RHOSN, &
+                                                          SMELT, &
+                                                         SNEVAP, &
                                                          GRDFLX, &
                                                          RHOSNF, & !RHO of snowfall
                                                        PRECIPFR, & ! time-step frozen precip
@@ -249,7 +253,6 @@ CONTAINS
                                                            FLHC, &
                                                            FLQC, &
                                                          SFCEXC, &
-                                                          RHOSN, &
                                                         THDIFSN, &
                                                            DRIP, &
                                                          ACDRIP, &
@@ -262,7 +265,6 @@ CONTAINS
                                                          EMISSL, &
                                                            ZNTL, &
                                                         LMAVAIL, &
-                                                          SMELT, &
                                                            SNOH, &
                                                           SNFLX, &
                                                            EDIR, &
@@ -559,6 +561,7 @@ CONTAINS
          G0 = g
          LV = xlv
          rovcp = rcp
+         CW = 4.183E6
 
          NZS=NSL
          NDDZS=2*(nzs-1)
@@ -613,7 +616,6 @@ CONTAINS
            DTDZS2(nzs1)=X
            DTDZS(2*nzs-2)=X/(ZSMAIN_dop-ZSMAIN(nzs))
         
-         CW =4.183E6
 
          !--- Constants used in Johansen soil thermal
          !--- conductivity method
@@ -698,6 +700,7 @@ CONTAINS
             alb(i,j) = albbck(i,j)
             qsfc(i,j) = qvg(i,j)/(1.+qvg(i,j))
             SMELT(i,j) = 0.
+            SNEVAP(i,j) = 0.
             drip(i,j) = 0.
             acdrip(i,j) = 0.
             SNOM (i,j) = 0.
@@ -705,6 +708,16 @@ CONTAINS
             SNOWFALLAC(i,j) = 0.
             PRECIPFR(i,j) = 0.
             RHOSNF(i,j) = -1.e3 ! non-zero flag
+            if(SNOW(i,j).lt.1.e-9 .or. SNOWH(i,j).lt.1.e-12) then
+              SNOW(i,j) = 0.
+              SNOWH(i,j) = 0.
+            endif
+            if(SNOW(i,j).gt.0. .and. SNOWH(i,j).gt.0.) then
+              RHOSN(i,j) = max(58.8,min(500.,SNOW(i,j)/SNOWH(i,j)) )
+            else
+              RHOSN(i,j) = 300. ! when no snow on the ground
+            endif
+
             SNFLX(i,j) = 0.
             DEW  (i,j) = 0.
             PC   (i,j) = 0.
@@ -869,16 +882,6 @@ CONTAINS
          soilfrac(k) = soilctop(i,k,j)
        enddo
 
-       if(SNOW(i,j).lt.1.e-9 .or. SNOWH(i,j).lt.1.e-12) then
-           SNOW(i,j) = 0.
-           SNOWH(i,j) = 0.
-       endif
-       if(SNOW(i,j).gt.0. .and. SNOWH(i,j).gt.0.) then
-         RHOSN(i,j) = max(58.8,min(500.,SNOW(i,j)/SNOWH(i,j)) )
-       else
-         RHOSN(i,j) = 300. ! when no snow on the ground
-       endif
-
        emissl(i,j) = emiss(i,j)
 
      IF ( debug_print ) THEN
@@ -996,6 +999,10 @@ CONTAINS
         canwatold(i,j) = canwatr
         sublim(i,j) = 0.
 
+        smelt(i,j) = 0.
+        snevap(i,j) = 0.
+
+
         DO k=1,nsnow+4
           old_prob1d(k) = old_prob(i,k,j)
           new_prob1d(k) = new_prob(i,k,j)
@@ -1008,6 +1015,7 @@ CONTAINS
                 iland,isoil,xland(i,j),ivgtyp(i,j),isltyp(i,j),  &
                 PRCPMS, NEWSNMS,SNWE,SNHEI,SNOWFRAC,             &
                 RHOSN(i,j),THDIFSN(i,j),RHONEWSN,RHOSNFALL,      &
+                SMELT(I,J),SNEVAP(I,J),                          &
                 snthresh,snowrat,grauprat,icerat,curat,          &
                 PATM,TABS,QVATM,QCATM,RHO,wind_sp(I,J),wind_zl,  &
                 GLW(I,J),GSW(I,J),EMISSL(I,J),                   &
@@ -1026,7 +1034,7 @@ CONTAINS
 !--- output variables
                 transp,rsm,soilm1d,tso1d,smfrkeep,keepfr,        &
                 soilt(I,J),soilt1(i,j),tsnav(i,j),dew(I,J),      &
-                qvg(I,J),qsg(I,J),qcg(I,J),SMELT(I,J),           &
+                qvg(I,J),qsg(I,J),qcg(I,J),                      &
                 SNOH(I,J),SNFLX(I,J),SNOM(I,J),SNOWFALLAC(I,J),  &
                 ACSNOW(I,J),edir(I,J),ec(I,J),ett(I,J),qfx(I,J), &
                 lh(I,J),hfx(I,J),sflx(I,J),sublim(I,J),          &
@@ -1401,7 +1409,8 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
                 nzs,nddzs,nroot,meltfactor,                      &
                 ILAND,ISOIL,XLAND,IVGTYP,ISLTYP,PRCPMS,          &
                 NEWSNMS,SNWE,SNHEI,SNOWFRAC,                     &
-                RHOSN,THDIFSN,RHONEWSN,RHOSNFALL,snhei_crit,     &
+                RHOSN,THDIFSN,RHONEWSN,RHOSNFALL,                &
+                smelt, snevap, snhei_crit,                       &
                 snowrat,grauprat,icerat,curat,                   &
                 PATM,TABS,QVATM,QCATM,rho,wind_sp,wind_zl,       &
                 GLW,GSW,EMISS,QKMS,TKMS,PC,                      &
@@ -1418,7 +1427,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
                 transp,rsm,                                      &
                 soilm1d,ts1d,smfrkeep,keepfr,soilt,soilt1,       &
                 tsnav,dew,qvg,qsg,qcg,                           &
-                SMELT,SNOH,SNFLX,SNOM,SNOWFALLAC,ACSNOW,         &
+                SNOH,SNFLX,SNOM,SNOWFALLAC,ACSNOW,               &
                 edir1,ec1,ett1,eeta,qfx,hfx,s,sublim,            &
                 evapl,prcpl,fltot,runoff1,runoff2,soilice,       &
                 soiliqw,infiltr,smf,hfrain,intersn,              &
@@ -1557,6 +1566,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
                                                            SNWE, &
                                                           SNHEI, &
                                                           SMELT, &
+                                                         SNEVAP, &
                                                            SNOM, &
                                                            SNOH, &
                                                           SNFLX, &
@@ -1608,7 +1618,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 
    REAL    ::  BSN, XSN, fso, fsn                              , &
                RAINF, SNTH, NEWSN, PRCPMS, NEWSNMS             , &
-               SNWEPR, T3, UPFLUX, XINET, SNEVAP
+               SNWEPR, T3, UPFLUX, XINET
    REAL    ::  rhocsn, keff, tsob,snprim,d9,d9sn,deltsn,fact
    REAL    ::   snhei_crit_newsn, keep_snow_albedo, SNOWFRACnewsn
    REAL    ::  newsnowratio, dd1
@@ -1647,8 +1657,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
    NEWSN=0.
    newsnowratio = 0.
    snowfracnewsn=0.
-   if(snhei == 0.) snowfrac=0.
-   smelt = 0.
+   if(.not.ISFPE .and. snhei == 0.) snowfrac=0.
    RAINF = 0.
    RSM=0.
    DD1=0.
@@ -1873,6 +1882,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 
          !-- 07Jun19 - thermal conductivity (K_eff) from Sturm et al.(1997)
          !keff = 10. ** (2.650 * RHOSN*1.e-3 - 1.652)
+         fact = 1.
          if(rhosn < 156. .or. (newsn > 0. .and. rhonewsn < 156.)) then
            keff = 0.023 + 0.234 * rhosn * 1.e-3
            !-- fact is added by tgs based on 4 Jan 2017 testing 
@@ -1881,6 +1891,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
            keff = 0.138 - 1.01 * rhosn*1.e-3 + 3.233 * rhosn**2 * 1.e-6
            fact = 2.
          endif
+         fact = 1.
 
          rhocsn = 2090.* rhosn
          if(newsn <= 0. .and. snhei > 5.0*SNHEI_crit) then
@@ -1957,32 +1968,37 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
        ! hwlps with these biases.. 
        if( snow_mosaic == 1.) then
          ALBsn=alb_snow
-         if(newsn > 0..and. snowfallac > SNHEI_CRIT_newsn) then
+         !if(newsn > 0..and. snowfallac > SNHEI_CRIT_newsn) then
          !-- 20apr20 - ~1 cm of fresh snow overwrites properties of "old" snow
            !print *,'ALB for fresh snow = 0.75'
-           ALBsn= 0.75 ! ECMWF value for fresh snow
-         elseif(newsn > 0. .and. snhei > 5.*snhei_crit .and. alb < 0.6) then
-         !-- Albedo correction with fresh snow and deep snow pack
-         !-- will reduce warm bias in western Canada
-         !-- and US West coast, where max snow albedo is low (0.3-0.5).
-           !print *,'ALB increase to 0.7',alb_snow,snhei,snhei_crit,alb,i,j
-           ALBsn = 0.7
+           !ALBsn= 0.75 ! ECMWF value for fresh snow
+         if(newsn > 0.) then
+           if(snowfallac > SNHEI_CRIT_newsn .and. snhei > 5.*snhei_crit .and. alb < 0.6) then
+           !-- Albedo correction with fresh snow and deep snow pack
+           !-- will reduce warm bias in western Canada
+           !-- and US West coast, where max snow albedo is low (0.3-0.5).
+             !print *,'ALB increase to 0.7',alb_snow,snhei,snhei_crit,alb,i,j
+             ALBsn = 0.7
+           endif
          endif
          Emiss= emissn
        else
          ALBsn   = MAX(keep_snow_albedo*alb_snow,               &
                    MIN((alb_snow_free +                         &
                    (alb_snow - alb_snow_free) * snowfrac), alb_snow))
-         if(newsn > 0..and. snowfallac > SNHEI_CRIT_newsn) then
+         !if(newsn > 0..and. snowfallac > SNHEI_CRIT_newsn) then
            !-- 20apr20 - ~1 cm of fresh snow overwrites properties of "old" snow
            !print *,'No mosaic ALB for fresh snow = 0.75',snowfallac,SNHEI_CRIT_newsn,i,j
-           ALBsn= 0.75 ! ECMWF value for fresh snow
-         elseif(newsn > 0. .and. snhei > 5.*snhei_crit .and. alb < 0.6) then
+           !ALBsn= 0.75 ! ECMWF value for fresh snow
+         if(newsn > 0.) then
+           if(snowfallac > SNHEI_CRIT_newsn .and. snhei > 5.*snhei_crit .and.  alb < 0.6) then
            !-- Albedo correction with fresh snow and deep snow pack
            !-- will reduce warm bias in western Canada
            !-- and US West coast, where max snow albedo is low (0.3-0.5).
-            ALBsn = 0.7 
-           !print *,'NO mosaic ALB increase to 0.7',alb_snow,snhei,snhei_crit,alb,i,j
+             !print *,'ALB increase to 0.7',alb_snow,snhei,snhei_crit,alb,i,j
+             ALBsn = 0.7
+             !print *,'NO mosaic ALB increase to 0.7',alb_snow,snhei,snhei_crit,alb,i,j
+           endif
          endif
          Emiss   = MAX(keep_snow_albedo*emissn,                 &
                    MIN((emiss_snowfree +                        &
@@ -2042,7 +2058,6 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
              qcgs = qcg
              csts = cst
              mavails = mavail
-             smelt=0.
              runoff1s=0.
              runoff2s=0.
 
@@ -2170,31 +2185,27 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
            qfx = qfxs*(1.-snowfrac) + qfx*snowfrac
            hfx = hfxs*(1.-snowfrac) + hfx*snowfrac
            s = ss*(1.-snowfrac) + s*snowfrac
-           evapl = evapls*(1.-snowfrac)
-           sublim = sublim*snowfrac
            prcpl = prcpls*(1.-snowfrac) + prcpl*snowfrac
            fltot = fltots*(1.-snowfrac) + fltot*snowfrac
            !alb
-           ALB   = MAX(keep_snow_albedo*alb,              &
-                   MIN((alb_snow_free + (alb - alb_snow_free) * snowfrac), alb))
+           ALB   = alb_snow_free*(1.-snowfrac) + alb*snowfrac
+           Emiss = emiss_snowfree*(1.-snowfrac) + emissn * snowfrac
 
-           Emiss = MAX(keep_snow_albedo*emissn,           &
-                   MIN((emiss_snowfree +                  &
-               (emissn - emiss_snowfree) * snowfrac), emissn))
+           !ALB   = MAX(keep_snow_albedo*alb,              &
+           !        MIN((alb_snow_free + (alb - alb_snow_free) * snowfrac), alb))
 
-          !   if(abs(fltot) > 2.) then
-          !    print *,'i,j,fltot,snowfrac,fltots',fltot,snowfrac,fltots,i,j
-          !  endif
+           !Emiss = MAX(keep_snow_albedo*emissn,           &
+           !        MIN((emiss_snowfree +                  &
+           !    (emissn - emiss_snowfree) * snowfrac), emissn))
+
+           !   if(abs(fltot) > 2.) then
+           !    print *,'i,j,fltot,snowfrac,fltots',fltot,snowfrac,fltots,i,j
+           !  endif
            runoff1 = runoff1s*(1.-snowfrac) + runoff1*snowfrac
            runoff2 = runoff2s*(1.-snowfrac) + runoff2*snowfrac
-           smelt = smelt * snowfrac
-           snom = snom * snowfrac
-           snevap = snevap * snowfrac
-           snoh = snoh * snowfrac
-           hfrain = hfrain * snowfrac
-           snflx = snflx * snowfrac
            mavail = mavails*(1.-snowfrac) + 1.*snowfrac
            infiltr = infiltrs*(1.-snowfrac) + infiltr*snowfrac
+           evapl = evapls
 
          IF ( debug_print ) THEN
            print *,' Ground flux combined', i,j, s
@@ -2567,7 +2578,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 !-----------------------------------------------------------------
 
         !-- define constants
-        RHOICE=900.
+        RHOICE=917.
         CI=RHOICE*2100.
         XLMELT=3.35E+5
         cvw=cw
@@ -2641,7 +2652,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
             soiliqwm(k)=(dqm+qmin)*(XLMELT*                       &
             (tav(k)-273.15)/tav(k)/9.81/psis)                       &
             **(-1./bclh)-qmin
-            fwsat(k)=dqm-soiliqwm(k)
+            fwsat(k)=(dqm-soiliqwm(k))/riw
             lwsat(k)=soiliqwm(k)+qmin
             soiliqwm(k)=max(0.,soiliqwm(k))
             soiliqwm(k)=min(soiliqwm(k), soilmoism(k))
@@ -2651,7 +2662,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
               soilicem(k)=min(soilicem(k),                          &
                    0.5*(smfrkeep(k)+smfrkeep(k+1)))
               soiliqwm(k)=max(0.,soilmoism(k)-soilicem(k)*riw)
-              fwsat(k)=dqm-soiliqwm(k)
+              fwsat(k)=(dqm-soiliqwm(k))/riw
               lwsat(k)=soiliqwm(k)+qmin
             endif
 
@@ -3247,7 +3258,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
         !--- SNOW flag -- ISICE
         ! ILAND=isice
 
-        RHOICE=900.
+        RHOICE=917.
         CI=RHOICE*2100.
         RAS=RHO*1.E-3
         RIW=rhoice*1.e-3
@@ -3310,28 +3321,56 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
              soiliqw(k)=(dqm+qmin)*(XLMELT*                          &
              (tso(k)-273.15)/tso(k)/9.81/psis)                       &
               **(-1./bclh)-qmin
-            fwsat(k)=dqm-soiliqwm(k)
-            lwsat(k)=soiliqwm(k)+qmin
-            soiliqwm(k)=max(0.,soiliqwm(k))
-            soiliqwm(k)=min(soiliqwm(k), soilmoism(k))
-            soilicem(k)=(soilmoism(k)-soiliqwm(k))/riw
-            
-            !---- melting and freezing is balanced, soil ice cannot increase
-            if(keepfr(k).eq.1.) then
-              soilicem(k)=min(soilicem(k),                            &
-                0.5*(smfrkeep(k)+smfrkeep(k+1)))
-              soiliqwm(k)=max(0.,soilmoism(k)-soilicem(k)*riw)
-              fwsat(k)=dqm-soiliqwm(k)
-              lwsat(k)=soiliqwm(k)+qmin
-            endif
-          else
-            soilicem(k)=0.
-            soiliqwm(k)=soilmoism(k)
-            lwsat(k)=dqm+qmin
-            fwsat(k)=0.
-          endif
-        ENDDO
+             soiliqw(k)=max(0.,soiliqw(k))
+             soiliqw(k)=min(soiliqw(k),soilmois(k))
+             soilice(k)=(soilmois(k)-soiliqw(k))/riw
+
+             !---- melting and freezing is balanced, soil ice cannot increase
+             if(keepfr(k).eq.1.) then
+               soilice(k)=min(soilice(k),smfrkeep(k))
+               soiliqw(k)=max(0.,soilmois(k)-soilice(k)*rhoice*1.e-3)
+             endif
+
+           else
+             soilice(k)=0.
+             soiliqw(k)=soilmois(k)
+           endif
+
+         ENDDO
+
+         !-- same for half levels
+         DO K=1,NZS1
+
+           tav(k)=0.5*(tso(k)+tso(k+1))
+           soilmoism(k)=0.5*(soilmois(k)+soilmois(k+1))
+           tavln=log(tav(k)/273.15)
+
+           if(tavln.lt.0.) then
+             soiliqwm(k)=(dqm+qmin)*(XLMELT*                         &
+             (tav(k)-273.15)/tav(k)/9.81/psis)                       &
+             **(-1./bclh)-qmin
+             fwsat(k)=(dqm-soiliqwm(k))/riw
+             lwsat(k)=soiliqwm(k)+qmin
+             soiliqwm(k)=max(0.,soiliqwm(k))
+             soiliqwm(k)=min(soiliqwm(k), soilmoism(k))
+             soilicem(k)=(soilmoism(k)-soiliqwm(k))/riw
+             !---- melting and freezing is balanced, soil ice cannot increase
+             if(keepfr(k).eq.1.) then
+               soilicem(k)=min(soilicem(k),                            &
+                 0.5*(smfrkeep(k)+smfrkeep(k+1)))
+               soiliqwm(k)=max(0.,soilmoism(k)-soilicem(k)*riw)
+               fwsat(k)=(dqm-soiliqwm(k))/riw
+               lwsat(k)=soiliqwm(k)+qmin
+             endif
+           else
+             soilicem(k)=0.
+             soiliqwm(k)=soilmoism(k)
+             lwsat(k)=dqm+qmin
+             fwsat(k)=0.
+           endif
+         ENDDO
         
+        !-- Update smfrkeep for new soilice
         do k=1,nzs
           if(soilice(k).gt.0.) then
             smfrkeep(k)=soilice(k)
@@ -3359,7 +3398,6 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
 
 !******************************************************************** 
  
-        SMELT=0.
         H=1.
 
         FQ=QKMS
@@ -3372,7 +3410,7 @@ print * ,'Soil moisture is below wilting in mixed grassland/cropland category at
         !-- check if all snow can evaporate during DT
         BETA=1.
         SNWEPR=SNWE
-        EPDT = EPOT * RAS * DELT * UMVEG
+        EPDT = EPOT * RAS * DELT
         IF(EPDT.gt.0. .and. SNWE.LE.EPDT) THEN 
            BETA=SNWE/max(1.e-8,EPDT)
            SNWE=0.
@@ -3795,7 +3833,8 @@ print *, 'TSO before calling SNOWTEMP: ', tso
         cotso(1)=h1/(1.+h1)
         rhtso(1)=(tso(nzs)+h1*(tso(nzs-1)-tso_dop))/(1.+h1)
         !if(i==515.and.j==220)print *,'TSO(nzs),cotso(1),rhtso(1)',i,j,tso(nzs),cotso(1),rhtso(1)
-        !cotso(1)=0.
+        cotso(1)=0.
+        rhtso(1)=tso_dop
         !rhtso(1)=TSO(NZS)
         DO 33 K=1,NZS2
           KN=NZS-K
@@ -4151,7 +4190,6 @@ endif ! 1==2
     THDIFSN = 0.265/RHOCSN
     RAS=RHO*1.E-3    
     SOILTFRAC=SOILT    
-    SMELT=0.
     SOH=0.
     SMELTG=0.
     SNOHG=0.
@@ -4176,12 +4214,13 @@ endif ! 1==2
     !         cotso(1)=h1/(1.+h1)
     !         rhtso(1)=(tso(nzs)+h1*(tso(nzs-1)-tso(nzs)))/
     !     1         (1.+h1)
-    !cotso(1)=0.
-    !rhtso(1)=TSO(NZS)
       did = (zshalf_dop-ZSHALF(nzs))
       h1=DTDZS(2*nzs-3)*THDIF(nzs-1)*(ZSHALF(nzs)-ZSHALF(nzs-1))/did
       cotso(1)=h1/(1.+h1)
       rhtso(1)=(tso(nzs)+h1*(tso(nzs-1)-tso_dop))/(1.+h1)
+      cotso(1)=0.
+      rhtso(1)=tso_dop
+      !rhtso(1)=TSO(NZS)
 
     DO 33 K=1,NZS2
       KN=NZS-K
@@ -4552,14 +4591,14 @@ endif ! 1==2
           print *,'1- SMELT',i,j,smelt
         ENDIF
         !-- rr - snow available for melting
-        rr=max(0.,SNWE/delt-BETA*EPOT*RAS*UMVEG)
+        rr=max(0.,SNWE/delt-BETA*EPOT*RAS)
         SMELT=amin1(SMELT,rr)
         IF ( debug_print ) THEN
           print *,'2- SMELT',i,j,smelt
         ENDIF
         !18apr08 - Egglston limit from the field experiments
-        !SMELT= amin1 (smelt, 5.6E-7*meltfactor*max(1.,(soilt-273.15)))
-        SMELT= amin1 (smelt, 5.6E-8*meltfactor*max(1.,(soilt-273.15)))
+        SMELT= amin1 (smelt, delt/60.*5.6E-8*meltfactor*max(1.,(soilt-273.15)))
+        !SMELT= amin1 (smelt, delt/60.*5.6E-7*meltfactor*max(1.,(soilt-273.15)))
         IF ( debug_print ) THEN
           print *,'3- SMELT',i,j,smelt
         ENDIF
@@ -4630,7 +4669,7 @@ endif ! 1==2
          SMELTG=AMIN1(SMELTG, 5.8e-9)
          
          !-- rr - potential melting
-         rr=max(0.,SNWE/delt-BETA*EPOT*RAS*UMVEG)
+         rr=max(0.,SNWE/delt)
          SMELTG=AMIN1(SMELTG, rr)
          SNOHGNEW=SMELTG*XLMELT*1.e3
          SNODIF=AMAX1(0.,(SNOHG-SNOHGNEW))
@@ -4646,7 +4685,7 @@ endif ! 1==2
        !-- total snow melt
        SMELT = SMELT + SMELTG
        !-- snow sublimation
-       SNEVAP = BETA*EPOT*RAS*UMVEG
+       SNEVAP = BETA*EPOT*RAS
 
       IF ( debug_print ) THEN
         print *,'SNHEI,SNOH',i,j,SNHEI,SNOH
@@ -4845,10 +4884,10 @@ endif ! 1==2
           Q2=X2-HYDRO(KN+1)*DTDZS2(KN-1)
           DENOM=1.+X2+X4-Q2*COSMC(K)
           COSMC(K+1)=Q4/DENOM
-          IF ( debug_print ) THEN
+          !IF ( debug_print ) THEN
             print *,'q2,soilmois(kn),DIFFU(KN),x2,HYDRO(KN+1),DTDZS2(KN-1),kn,k' &
-                    ,q2,soilmois(kn),DIFFU(KN),x2,HYDRO(KN+1)
-          ENDIF
+                    ,q2,soilmois(kn),DIFFU(KN),x2,HYDRO(KN+1),DTDZS2(KN-1),kn,k
+          !ENDIF
           RHSMC(K+1)=(SOILMOIS(KN)+Q2*RHSMC(K)                              &
                      +TRANSP(KN)                                            &
                      /(ZSHALF(KN+1)-ZSHALF(KN))                             &
@@ -5018,7 +5057,10 @@ endif ! 1==2
          KK=NZS-K+1
          QQ=COSMC(KK)*SOILMOIS(K-1)+RHSMC(KK)
          IF (QQ.LT.0.) THEN
-         !  print *,'negative QQ=',qq
+           print *,'negative QQ=',qq
+           !print *,'cosmc=',cosmc
+           !print *,'rhsmc=',rhsmc
+           !print *,'SOILMOIS=',SOILMOIS
            SOILMOIS(K)=1.e-8 
 
          ELSE IF(QQ.GT.DQM) THEN
@@ -5141,7 +5183,7 @@ endif ! 1==2
          nzs1=nzs-1
 
 !-- Constants for Johansen (1975) thermal conductivity
-         kzero =2.       ! if qwrtz > 0.2
+         kzero =2.       ! if qwrtz > 0.2, otherewise kzero =3.
 
 
          do k=1,nzs
@@ -5151,14 +5193,20 @@ endif ! 1==2
             hk    (k)=0.
          enddo
 
+           !-- for DETAL
            ws=dqm+qmin
            x1=xlmelt/(g0_p*psis)
            x2=x1/bclh*ws
            x4=(bclh+1.)/bclh
-           !--- Next 3 lines are for Johansen thermal conduct.
+
+           !-- for Johansen thermal conduct.
            gamd=(1.-ws)*2700.
            kdry=(0.135*gamd+64.7)/(2700.-0.947*gamd)
-           kas=kqwrtz**qwrtz*kzero**(1.-qwrtz)
+           if(qwrtz > 0.2) then
+             kas=kqwrtz**qwrtz*kzero**(1.-qwrtz)
+           else
+             kas=kqwrtz**qwrtz*3.**(1.-qwrtz)
+           endif
 
          DO K=1,NZS1
            tn=tav(k) - 273.15
@@ -5175,81 +5223,103 @@ endif ! 1==2
              HK(K)=.1744*fact
            END IF
 
-             IF(soilicem(k).NE.0.AND.TN.LT.0.) then
-             !--- DETAL is taking care of energy spent on freezing or released from 
-             !    melting of soil water
+           IF( TN < 0.) then
+           !IF(soilicem(k)>0.AND.TN<0.) then
+           !--- DETAL is taking care of energy spent on freezing or released from 
+           !    melting of soil water
 
-               DETAL(K)=273.15*X2/(TAV(K)*TAV(K))*                  &
-                       (TAV(K)/(X1*TN))**X4
-
-               if(keepfr(k).eq.1.) then
-                 detal(k)=0.
-               endif
-
-             ENDIF
-
-             !--- Next 10 lines calculate Johansen thermal conductivity KJPL
-             kasat(k)=kas**(1.-ws)*kice**fwsat(k)                    &
-                      *kwt**lwsat(k)
-
-             X5=(soilmoism(k)+qmin)/ws
-           if(soilicem(k).eq.0.) then
-             sr=max(0.101,x5)
-             ke=log10(sr)+1.
-             !--- next 2 lines - for coarse soils
-             !sr=max(0.0501,x5)
-             !ke=0.7*log10(sr)+1.
-           else
-             ke=x5
-           endif
-
-             kjpl(k)=ke*(kasat(k)-kdry)+kdry
-
-             !--- CAP -volumetric heat capacity
-             CAP(K)=(1.-WS)*RHOCS                                    &
-                   + (soiliqwm(K)+qmin)*CVW                          &
-                   + soilicem(K)*CI                                  &
-                   + (dqm-soilmoism(k))*CP*1.2                       &
-                   - DETAL(K)*1.e3*xlmelt
-
-             a=RIW*soilicem(K)
-
-             if((ws-a).lt.0.12)then
-               diffu(K)=0.
-             else
-               H=max(0.,(soilmoism(K)-a)/(max(1.e-8,(dqm-a))))
-               facd=1.
-               if(a.ne.0.)facd=1.-a/max(1.e-8,soilmoism(K))
-               ame=max(1.e-8,dqm-riw*soilicem(K))
-               !--- DIFFU is diffusional conductivity of soil water
-               diffu(K)=-BCLH*KSAT*PSIS/ame*                             &
-                       (dqm/ame)**3.                                     &
-                       *H**(BCLH+2.)*facd
+             DETAL(K)=273.15*X2/(TAV(K)*TAV(K))*                  &
+                      (TAV(K)/(X1*TN))**X4
+ 
+             if(keepfr(k).eq.1.) then
+               detal(k)=0.
              endif
 
-             !diffu(K)=-BCLH*KSAT*PSIS/dqm                              &
-             !       *H**(BCLH+2.)
+           ENDIF
 
+           !--- CAP -volumetric heat capacity
+           CAP(K)=(1.-WS)*RHOCS                                    &
+                 + (soiliqwm(K)+qmin)*CVW                          &
+                 + soilicem(K)*CI                                  &
+                 + (ws-soilmoism(k))*CP*1.2                        &
+                 - DETAL(K)*rhowater*xlmelt
 
-             !--- thdif - thermal diffusivity
-             ! thdif(K)=HK(K)/CAP(K)
-             !--- Use thermal conductivity from Johansen (1975)
-             thdif(K)=KJPL(K)/CAP(K)
+           !--- Next 10 lines calculate Johansen thermal conductivity KJPL
+           kasat(k)=kas**(1.-ws)*kice**fwsat(k)                    &
+                      *kwt**lwsat(k)
 
+           X5=min(1.,(soilmoism(k)+qmin)/ws)
+           if(soilicem(k) <= 0.) then 
+           !-- unfrozen soil
+             if(qwrtz < 0.4) then
+             !-- fine soils
+               sr=max(0.1,x5)
+               ke=max(0.,log10(sr)+1.)
+             else
+             !-- for coarse soils
+               sr=max(0.05,x5)
+               ke=0.7*log10(sr)+1.
+             endif
+           else
+           !-- frozen soils
+             if(qwrtz < 0.4) then
+             !-- fine soils
+               sr=max(0.1,x5)
+               ke=sr
+             else
+             !-- for coarse soils
+               sr=max(0.05,x5)
+               ke=sr
+             endif
+           endif
+
+           kjpl(k)=ke*(kasat(k)-kdry)+kdry
+
+           !--- thdif - thermal diffusivity
+           !thdif(K)=HK(K)/CAP(K)
+           !--- Use thermal conductivity from Johansen (1975)
+           thdif(K)=KJPL(K)/CAP(K)
+
+           !--- Diffusional soil moisture conductivity 
+           a=RIW*soilicem(K)
+
+           if((ws-a).lt.0.12)then
+             diffu(K)=0.
+           else
+             H=max(0.,(soilmoism(K)+qmin-a)/(max(1.e-8,(ws-a))))
+             facd=1.
+             if(a > 0.)facd=1.-a/max(1.e-8,soilmoism(K))
+             ame=max(1.e-8,ws-riw*soilicem(K))
+             !--- DIFFU is diffusional conductivity of soil water
+             diffu(K)=-BCLH*KSAT*PSIS/ame*                            &
+                     (ws/ame)**3.                                     &
+                     *H**(BCLH+2.)*facd
+           endif
+           !diffu(K)=-BCLH*KSAT*PSIS/dqm                              &
+           !       *H**(BCLH+2.)
          END DO
 
-    IF ( debug_print ) THEN
-   print *,'soilice*riw,soiliqw,soilmois,ws',soilice*riw,soiliqw,soilmois,ws
-    ENDIF
-         DO K=1,NZS
+         !IF ( debug_print ) THEN
+           print *,'soilice*riw,soiliqw,soilmois,ws',soilice*riw,soiliqw,soilmois,ws
+           print *,'cap=',cap
+           print *,'detal=',detal*1.e3
+           print *,'tav=',tav
+           print *,'keepfr=',keepfr
+           print *,'kjpl=',kjpl
+           print *,'thdif=',thdif
+         !ENDIF
 
-           if((ws-riw*soilice(k)).lt.0.12)then
-             hydro(k)=0.
-           else
-             fach=1.
-             if(soilice(k).ne.0.)                                     &
-               fach=1.-riw*soilice(k)/max(1.e-8,soilmois(k))
-             am=max(1.e-8,dqm-riw*soilice(k))
+         !-- Hydraulic soil moisture conductivity
+         DO K=1,NZS
+         if((ws-riw*soilice(k)).lt.0.12)then
+           hydro(k)=0.
+           !print*,'hydro=0,riw*soilice(k),ws',k,riw*soilice(k),ws
+         else
+           fach=1.
+           if(soilice(k) > 0.)                                     &
+             fach=max(0.,(1.-riw*soilice(k)/max(1.e-8,soilmois(k))))
+
+             am=max(1.e-8,ws-riw*soilice(k))
              !--- HYDRO is hydraulic conductivity of soil water
              hydro(K)=min(KSAT,KSAT/am*                               & 
                      (soiliqw(K)/am)                                  &

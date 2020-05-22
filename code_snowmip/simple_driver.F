@@ -174,6 +174,7 @@ program simple_driver
   real :: smcliqmass
 
   real, dimension (1:ime,1:jme)    :: RHOSNF
+  real, dimension (1:ime,1:jme)    :: RHOSN
   real, dimension (1:ime,1:jme)    :: snowfallac
   real, dimension (1:ime,1:jme)    :: graupelncv
   real, dimension (1:ime,1:jme)    :: snowncv
@@ -202,6 +203,8 @@ program simple_driver
   integer :: iswater, isice
   real, dimension (1:ime,1:jme)    :: SNOWH      ! Physical snow depth.
   real, dimension (1:ime,1:jme)    :: SNOW       ! Snow water equivalent in kg/m^2/s
+  real, dimension (1:ime,1:jme)    :: SMELT      ! Snowmelt rate m/s
+  real, dimension (1:ime,1:jme)    :: SNEVAP     ! SNow evaporation rate m/s
   real, dimension (1:ime,1:jme)    :: Hfus       ! energy of fusion ( W m{-2} )
   real, dimension (1:ime,1:jme)    :: SNEQV      ! Water equivalent of accumulated snow depth (m).
   real, dimension (1:ime,1:jme)    :: ALBEDO     ! Surface albedo including possible snow-cover effect.  This is set in LSMRUC,
@@ -1068,8 +1071,11 @@ acsnow =0.0 ! - run total frozen precipitation
     hfrain(i,j) = 0.
     esnow(i,j) = 0.
     snomlt(i,j) = 0.
-    CALL LSMRUC(nowdate,local,dt,ktime,nsoil,                            &
+    smelt(i,j) = 0.
+    snevap(i,j) = 0.
+    CALL LSMRUC(nowdate,local,dt,ktime,nsoil,                    &
                 sldpth,rainbl,snow,snowh,sncovr,ffrozp,frpcpn,   &
+                rhosn,smelt,snevap,                              &
                 rhosnf,graupelncv,snowncv,rainncv,precipfr,sfcspd,  &
                 zlvl_wind, zlvl*2.,sfcprs,tabs,q2,qcatm,rho,     & !p_phy in [pa]
                 longwave,solnet,emissi,ch,                       & !flqc,flhc,
@@ -1345,6 +1351,7 @@ acsnow =0.0 ! - run total frozen precipitation
      call output_var(ktime, t1(i,j),        "ts",    "surface temperature",                        "K"             )
  print *,'TSK=',ktime,t1(i,j)
      call output_levels(ktime, nsoil, "num_soil_layers", stc,  "tsl",   "temperature of soil layers", "K"          )
+ print *,'STC20=',ktime,0.5*(stc(4)+stc(5))
      call output_var(ktime, min(273.,soilt1(i,j)),    "tsn",   "snow internal temperature",                  "K"             )
      call output_var(ktime, min(273.,t1(i,j)),        "tsns",  "snow surface temperature",                   "K"             )
 ! End of ESM-SnowMIP output`
