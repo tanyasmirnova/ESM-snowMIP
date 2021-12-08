@@ -5251,26 +5251,18 @@ endif ! 1==2
            X5=min(1.,(soilmoism(k)+qmin)/ws)
            if(soilicem(k) <= 0.) then 
            !-- unfrozen soil
-             if(qwrtz < 0.4) then
-             !-- fine soils
+             if(qwrtz > 0.2) then
+             !-- for coarse soils
                sr=max(0.1,x5)
                ke=max(0.,log10(sr)+1.)
              else
-             !-- for coarse soils
+             !-- fine soils
                sr=max(0.05,x5)
                ke=0.7*log10(sr)+1.
              endif
            else
            !-- frozen soils
-             if(qwrtz < 0.4) then
-             !-- fine soils
-               sr=max(0.1,x5)
-               ke=sr
-             else
-             !-- for coarse soils
-               sr=max(0.05,x5)
-               ke=sr
-             endif
+             ke=x5
            endif
 
            kjpl(k)=ke*(kasat(k)-kdry)+kdry

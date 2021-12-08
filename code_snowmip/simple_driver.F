@@ -1351,7 +1351,10 @@ acsnow =0.0 ! - run total frozen precipitation
      call output_var(ktime, t1(i,j),        "ts",    "surface temperature",                        "K"             )
  print *,'TSK=',ktime,t1(i,j)
      call output_levels(ktime, nsoil, "num_soil_layers", stc,  "tsl",   "temperature of soil layers", "K"          )
+ !print *,'STC20=',ktime,stc(6)
  print *,'STC20=',ktime,0.5*(stc(4)+stc(5))
+ print *,'STC10=',ktime,stc(4)
+ print *,'SOILMOIS',ktime,soilmois(i,:,j)
      call output_var(ktime, min(273.,soilt1(i,j)),    "tsn",   "snow internal temperature",                  "K"             )
      call output_var(ktime, min(273.,t1(i,j)),        "tsns",  "snow surface temperature",                   "K"             )
 ! End of ESM-SnowMIP output`
